@@ -4311,3 +4311,259 @@
     transform: scale(1.15);
     box-shadow: 0 0 0 2px var(--primary);
 }
+
+/* =========================================== */
+/* MEJORAS PARA FIRMAS EN MÓVIL */
+/* =========================================== */
+
+/* Handles más grandes y accesibles en móvil */
+@media (max-width: 768px) {
+    .document-signature {
+        min-width: 120px !important;
+        min-height: 60px !important;
+        border: 3px solid var(--primary);
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        background: rgba(47, 108, 70, 0.15);
+    }
+    
+    .document-signature.selected {
+        border: 3px solid var(--accent);
+        background: rgba(89, 157, 94, 0.25);
+        box-shadow: 0 0 0 3px rgba(89, 157, 94, 0.4);
+    }
+    
+    /* Handles mucho más grandes para tocar fácilmente */
+    .signature-handle {
+        width: 25px;
+        height: 25px;
+        background: var(--accent);
+        border: 3px solid white;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+        z-index: 100;
+    }
+    
+    .handle-top-left {
+        top: -12px;
+        left: -12px;
+    }
+    
+    .handle-top-right {
+        top: -12px;
+        right: -12px;
+    }
+    
+    .handle-bottom-left {
+        bottom: -12px;
+        left: -12px;
+    }
+    
+    .handle-bottom-right {
+        bottom: -12px;
+        right: -12px;
+    }
+    
+    /* Imagen de firma ajustada */
+    .document-signature img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        pointer-events: none;
+    }
+}
+
+/* Para pantallas muy pequeñas */
+@media (max-width: 375px) {
+    .document-signature {
+        min-width: 100px !important;
+        min-height: 50px !important;
+    }
+    
+    .signature-handle {
+        width: 22px;
+        height: 22px;
+    }
+}
+
+/* Feedback visual para toques */
+.document-signature:active {
+    opacity: 0.9;
+    transform: scale(0.98);
+}
+
+/* Efecto de selección para móvil */
+@keyframes pulse-mobile {
+    0% {
+        box-shadow: 0 0 0 0 rgba(47, 108, 70, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(47, 108, 70, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(47, 108, 70, 0);
+    }
+}
+
+.document-signature.selected.mobile-selected {
+    animation: pulse-mobile 1s ease;
+}
+
+/* Mejorar el área de toque */
+.document-signature {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+/* Indicador visual de que es arrastrable */
+.document-signature::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 12px;
+    height: 12px;
+    background: var(--primary);
+    border-radius: 50%;
+    opacity: 0.7;
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .document-signature::after {
+        display: block;
+    }
+}
+
+/* =========================================== */
+/* MEJORAS PARA EL VISOR EN MÓVIL */
+/* =========================================== */
+
+@media (max-width: 768px) {
+    /* Mejorar el área de trabajo */
+    .viewer-content {
+        overflow: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .document-container {
+        touch-action: pan-x pan-y;
+        -webkit-user-select: none;
+        user-select: none;
+    }
+    
+    /* Prevenir zoom accidental en el documento */
+    .document-container * {
+        touch-action: none;
+    }
+    
+    /* Botón de ayuda para móvil */
+    .mobile-help {
+        position: fixed;
+        bottom: 20px;
+        left: 20px;
+        background: var(--primary);
+        color: white;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        cursor: pointer;
+    }
+    
+    .mobile-help:hover {
+        background: var(--secondary);
+    }
+}
+
+/* =========================================== */
+/* MODAL DE AYUDA PARA MÓVIL */
+/* =========================================== */
+
+.mobile-help-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.mobile-help-modal.show {
+    display: flex;
+    animation: fadeIn 0.3s ease;
+}
+
+.mobile-help-content {
+    background: white;
+    border-radius: 15px;
+    padding: 25px;
+    max-width: 400px;
+    width: 100%;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.mobile-help-content h3 {
+    color: var(--primary);
+    margin-bottom: 20px;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.help-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.help-step {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 10px;
+    border-left: 4px solid var(--primary);
+}
+
+.step-icon {
+    font-size: 24px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: white;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.step-text {
+    flex: 1;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Mostrar ayuda solo en móvil */
+@media (min-width: 769px) {
+    .mobile-help {
+        display: none !important;
+    }
+}

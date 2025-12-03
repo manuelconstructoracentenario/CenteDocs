@@ -501,7 +501,7 @@
             </div>
         </div>
     </div>
-    
+
     <!-- Menú flotante para móvil -->
     <div class="mobile-floating-menu" id="mobileFloatingMenu">
         <button class="mobile-floating-btn" id="mobileSaveBtn" title="Guardar documento firmado">
@@ -516,6 +516,47 @@
             <i class="fas fa-eye"></i>
             <span class="mobile-btn-text">Ver</span>
         </button>
+    </div>
+
+    <!-- Indicador de ayuda para móvil -->
+    <div class="mobile-help" id="mobileHelpBtn" title="Ayuda para usar firmas en móvil">
+        <i class="fas fa-question"></i>
+    </div>
+
+    <!-- Modal de ayuda para móvil -->
+    <div class="mobile-help-modal" id="mobileHelpModal">
+        <div class="mobile-help-content">
+            <h3><i class="fas fa-mobile-alt"></i> Cómo usar firmas en móvil</h3>
+            <div class="help-steps">
+                <div class="help-step">
+                    <div class="step-icon">👆</div>
+                    <div class="step-text">
+                        <strong>Toque largo</strong> en una firma para seleccionarla
+                    </div>
+                </div>
+                <div class="help-step">
+                    <div class="step-icon">👆👆</div>
+                    <div class="step-text">
+                        <strong>Arrastra</strong> para mover la firma
+                    </div>
+                </div>
+                <div class="help-step">
+                    <div class="step-icon">👉</div>
+                    <div class="step-text">
+                        <strong>Usa los círculos</strong> en las esquinas para redimensionar
+                    </div>
+                </div>
+                <div class="help-step">
+                    <div class="step-icon">💾</div>
+                    <div class="step-text">
+                        <strong>Guarda</strong> con el botón flotante abajo
+                    </div>
+                </div>
+            </div>
+            <button class="btn btn-primary" id="closeHelpModal" style="width: 100%; margin-top: 20px;">
+                <i class="fas fa-check"></i> Entendido
+            </button>
+        </div>
     </div>
 
     <!-- Tooltip global para firmantes (funciona en móvil y desktop) -->

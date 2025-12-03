@@ -2272,87 +2272,117 @@ class DocumentService {
     // MODIFICADA: makeSignatureInteractive con eventos táctiles
     // ===========================================
     static makeSignatureInteractive(element, signatureData) {
-        // Eventos para mouse (ya existen)
-        element.addEventListener('mousedown', (e) => {
+        // Remover eventos previos si existen
+        element.removeEventListener('mousedown', element._mouseHandler);
+        element.removeEventListener('touchstart', element._touchHandler);
+        
+        // Handler para mouse
+        const mouseHandler = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
             if (e.target.classList.contains('signature-handle')) {
                 this.startResize(e, element, signatureData);
             } else {
                 this.startDrag(e, element, signatureData);
             }
-        });
-
+        };
+        
+        // Handler para touch
+        const touchHandler = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            if (e.touches.length === 1) {
+                const touch = e.touches[0];
+                const target = document.elementFromPoint(touch.clientX, touch.clientY);
+                
+                // Guardar posición inicial del toque
+                this.touchStartX = touch.clientX;
+                this.touchStartY = touch.clientY;
+                
+                // Verificar si es toque en handle o en la firma
+                if (target && target.classList.contains('signature-handle')) {
+                    this.isResizingSignature = true;
+                    // Simular evento mouse para resize
+                    const mouseEvent = new MouseEvent('mousedown', {
+                        clientX: touch.clientX,
+                        clientY: touch.clientY,
+                        target: target
+                    });
+                    this.startResize(mouseEvent, element, signatureData);
+                } else {
+                    this.isDraggingSignature = true;
+                    // Simular evento mouse para drag
+                    const mouseEvent = new MouseEvent('mousedown', {
+                        clientX: touch.clientX,
+                        clientY: touch.clientY,
+                        target: element
+                    });
+                    this.startDrag(mouseEvent, element, signatureData);
+                }
+                
+                // Guardar tiempo del toque
+                this.lastTouchTime = Date.now();
+            }
+        };
+        
+        // Guardar referencias a los handlers
+        element._mouseHandler = mouseHandler;
+        element._touchHandler = touchHandler;
+        
+        // Agregar eventos
+        element.addEventListener('mousedown', mouseHandler);
+        element.addEventListener('touchstart', touchHandler, { passive: false });
+        
+        // Click para seleccionar
         element.addEventListener('click', (e) => {
             e.stopPropagation();
             this.selectSignature(element);
         });
-
-        // ✅ AGREGAR EVENTOS TÁCTILES PARA MÓVIL
-        element.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            const touch = e.touches[0];
-            const target = document.elementFromPoint(touch.clientX, touch.clientY);
-            
-            // Temporizador para detectar toque largo (para seleccionar sin arrastrar)
-            element.touchTimer = setTimeout(() => {
-                // Toque largo - seleccionar firma
-                this.selectSignature(element);
-            }, 500);
-            
-            if (target && target.classList.contains('signature-handle')) {
-                // Clonar el evento para simular mouse event
-                const mouseEvent = new MouseEvent('mousedown', {
-                    clientX: touch.clientX,
-                    clientY: touch.clientY,
-                    target: target
-                });
-                this.startResize(mouseEvent, element, signatureData);
-            } else {
-                const mouseEvent = new MouseEvent('mousedown', {
-                    clientX: touch.clientX,
-                    clientY: touch.clientY,
-                    target: element
-                });
-                this.startDrag(mouseEvent, element, signatureData);
-            }
-        }, { passive: false });
         
+        // Doble toque para seleccionar (móvil)
         element.addEventListener('touchend', (e) => {
             e.preventDefault();
-            if (element.touchTimer) {
-                clearTimeout(element.touchTimer);
+            const currentTime = Date.now();
+            const timeDiff = currentTime - this.lastTouchTime;
+            
+            // Si fue un toque rápido y no se arrastró, seleccionar
+            if (timeDiff < 300 && !this.isDraggingSignature && !this.isResizingSignature) {
+                this.selectSignature(element);
             }
-            // Toque corto - también seleccionar
-            this.selectSignature(element);
         }, { passive: false });
         
-        element.addEventListener('touchmove', (e) => {
-            if (element.touchTimer) {
-                clearTimeout(element.touchTimer);
-            }
-        }, { passive: false });
+        // Asegurar que las firmas sean seleccionables en móvil
+        element.style.touchAction = 'none';
+        element.style.userSelect = 'none';
     }
 
-    // ===========================================
-    // MODIFICADA: startDrag para eventos táctiles
-    // ===========================================
     static startDrag(e, element, signatureData) {
         e.preventDefault();
         e.stopPropagation();
         
+        // Verificar si es touch o mouse
+        const isTouch = e.type === 'touchstart' || e.type.startsWith('touch');
         this.isDraggingSignature = true;
         this.currentDraggingSignature = { element, signatureData };
 
-        // Obtener coordenadas iniciales (compatibilidad con touch)
-        const isTouch = e.type.includes('touch');
+        // Obtener coordenadas iniciales
         const startX = isTouch ? e.touches[0].clientX : e.clientX;
         const startY = isTouch ? e.touches[0].clientY : e.clientY;
         const startLeft = parseFloat(element.style.left);
         const startTop = parseFloat(element.style.top);
+        
+        // Obtener el contenedor del documento
+        const container = document.getElementById('documentContainer');
+        const containerRect = container ? container.getBoundingClientRect() : null;
 
-        function dragMove(moveEvent) {
-            if (!DocumentService.isDraggingSignature) return;
+        // Función para mover
+        const dragMove = (moveEvent) => {
+            if (!this.isDraggingSignature) return;
+            
+            // Prevenir comportamiento por defecto (scroll)
+            moveEvent.preventDefault();
             
             const currentX = isTouch ? moveEvent.touches[0].clientX : moveEvent.clientX;
             const currentY = isTouch ? moveEvent.touches[0].clientY : moveEvent.clientY;
@@ -2360,8 +2390,8 @@ class DocumentService {
             const dx = currentX - startX;
             const dy = currentY - startY;
             
-            const newLeft = Math.max(0, startLeft + dx);
-            const newTop = Math.max(0, startTop + dy);
+            let newLeft = startLeft + dx;
+            let newTop = startTop + dy;
             
             // Limitar al área del documento
             const canvas = document.getElementById('documentCanvas');
@@ -2369,33 +2399,48 @@ class DocumentService {
                 const maxX = canvas.clientWidth - element.clientWidth;
                 const maxY = canvas.clientHeight - element.clientHeight;
                 
-                element.style.left = Math.min(maxX, newLeft) + 'px';
-                element.style.top = Math.min(maxY, newTop) + 'px';
-            } else {
-                element.style.left = newLeft + 'px';
-                element.style.top = newTop + 'px';
+                newLeft = Math.max(0, Math.min(maxX, newLeft));
+                newTop = Math.max(0, Math.min(maxY, newTop));
             }
             
-            signatureData.x = parseFloat(element.style.left);
-            signatureData.y = parseFloat(element.style.top);
-        }
+            // Aplicar transformación
+            element.style.left = newLeft + 'px';
+            element.style.top = newTop + 'px';
+            
+            // Actualizar datos de la firma
+            signatureData.x = newLeft;
+            signatureData.y = newTop;
+            
+            // Forzar reflow para mejor rendimiento
+            element.style.transform = 'translateZ(0)';
+        };
 
-        function dragEnd() {
-            DocumentService.isDraggingSignature = false;
-            DocumentService.currentDraggingSignature = null;
+        // Función para finalizar
+        const dragEnd = () => {
+            this.isDraggingSignature = false;
+            this.currentDraggingSignature = null;
             
             if (isTouch) {
                 document.removeEventListener('touchmove', dragMove);
                 document.removeEventListener('touchend', dragEnd);
+                document.removeEventListener('touchcancel', dragEnd);
             } else {
                 document.removeEventListener('mousemove', dragMove);
                 document.removeEventListener('mouseup', dragEnd);
             }
-        }
+            
+            // Resetear transformación
+            element.style.transform = '';
+            
+            // Actualizar vista de firmas
+            this.renderSignaturesList();
+        };
 
+        // Agregar event listeners
         if (isTouch) {
             document.addEventListener('touchmove', dragMove, { passive: false });
             document.addEventListener('touchend', dragEnd, { passive: false });
+            document.addEventListener('touchcancel', dragEnd, { passive: false });
         } else {
             document.addEventListener('mousemove', dragMove);
             document.addEventListener('mouseup', dragEnd);
@@ -2405,68 +2450,133 @@ class DocumentService {
     static startResize(e, element, signatureData) {
         e.preventDefault();
         e.stopPropagation();
-
+        
+        const isTouch = e.type === 'touchstart' || e.type.startsWith('touch');
         const handle = e.target;
-        const startX = e.clientX;
-        const startY = e.clientY;
+        
+        // Obtener coordenadas iniciales
+        const startX = isTouch ? e.touches[0].clientX : e.clientX;
+        const startY = isTouch ? e.touches[0].clientY : e.clientY;
         const startWidth = parseFloat(element.style.width);
         const startHeight = parseFloat(element.style.height);
         const startLeft = parseFloat(element.style.left);
         const startTop = parseFloat(element.style.top);
 
-        function resizeMove(e) {
-            const dx = e.clientX - startX;
-            const dy = e.clientY - startY;
+        // Determinar qué handle se está usando
+        const handleType = Array.from(handle.classList).find(cls => 
+            cls.includes('handle-')
+        );
+
+        // Función para redimensionar
+        const resizeMove = (moveEvent) => {
+            moveEvent.preventDefault();
+            
+            const currentX = isTouch ? moveEvent.touches[0].clientX : moveEvent.clientX;
+            const currentY = isTouch ? moveEvent.touches[0].clientY : moveEvent.clientY;
+            
+            const dx = currentX - startX;
+            const dy = currentY - startY;
 
             let newWidth = startWidth;
             let newHeight = startHeight;
             let newLeft = startLeft;
             let newTop = startTop;
 
-            if (handle.classList.contains('handle-top-left')) {
-                newWidth = Math.max(50, startWidth - dx);
-                newHeight = Math.max(30, startHeight - dy);
-                newLeft = Math.max(0, startLeft + (startWidth - newWidth));
-                newTop = Math.max(0, startTop + (startHeight - newHeight));
-            } else if (handle.classList.contains('handle-top-right')) {
-                newWidth = Math.max(50, startWidth + dx);
-                newHeight = Math.max(30, startHeight - dy);
-                newTop = Math.max(0, startTop + (startHeight - newHeight));
-            } else if (handle.classList.contains('handle-bottom-left')) {
-                newWidth = Math.max(50, startWidth - dx);
-                newHeight = Math.max(30, startHeight + dy);
-                newLeft = Math.max(0, startLeft + (startWidth - newWidth));
-            } else if (handle.classList.contains('handle-bottom-right')) {
-                newWidth = Math.max(50, startWidth + dx);
-                newHeight = Math.max(30, startHeight + dy);
+            // Tamaños mínimos
+            const minWidth = 50;
+            const minHeight = 30;
+
+            // Calcular nuevo tamaño según el handle
+            switch(handleType) {
+                case 'handle-top-left':
+                    newWidth = Math.max(minWidth, startWidth - dx);
+                    newHeight = Math.max(minHeight, startHeight - dy);
+                    newLeft = Math.max(0, startLeft + (startWidth - newWidth));
+                    newTop = Math.max(0, startTop + (startHeight - newHeight));
+                    break;
+                    
+                case 'handle-top-right':
+                    newWidth = Math.max(minWidth, startWidth + dx);
+                    newHeight = Math.max(minHeight, startHeight - dy);
+                    newTop = Math.max(0, startTop + (startHeight - newHeight));
+                    break;
+                    
+                case 'handle-bottom-left':
+                    newWidth = Math.max(minWidth, startWidth - dx);
+                    newHeight = Math.max(minHeight, startHeight + dy);
+                    newLeft = Math.max(0, startLeft + (startWidth - newWidth));
+                    break;
+                    
+                case 'handle-bottom-right':
+                    newWidth = Math.max(minWidth, startWidth + dx);
+                    newHeight = Math.max(minHeight, startHeight + dy);
+                    break;
             }
 
+            // Aplicar cambios
             element.style.width = newWidth + 'px';
             element.style.height = newHeight + 'px';
             element.style.left = newLeft + 'px';
             element.style.top = newTop + 'px';
 
+            // Actualizar datos
             signatureData.width = newWidth;
             signatureData.height = newHeight;
             signatureData.x = newLeft;
             signatureData.y = newTop;
-        }
+            
+            // Forzar reflow
+            element.style.transform = 'translateZ(0)';
+        };
 
-        function resizeEnd() {
-            document.removeEventListener('mousemove', resizeMove);
-            document.removeEventListener('mouseup', resizeEnd);
-        }
+        // Función para finalizar
+        const resizeEnd = () => {
+            if (isTouch) {
+                document.removeEventListener('touchmove', resizeMove);
+                document.removeEventListener('touchend', resizeEnd);
+                document.removeEventListener('touchcancel', resizeEnd);
+            } else {
+                document.removeEventListener('mousemove', resizeMove);
+                document.removeEventListener('mouseup', resizeEnd);
+            }
+            
+            // Resetear transformación
+            element.style.transform = '';
+            
+            // Actualizar vista
+            this.renderSignaturesList();
+        };
 
-        document.addEventListener('mousemove', resizeMove);
-        document.addEventListener('mouseup', resizeEnd);
+        // Agregar event listeners
+        if (isTouch) {
+            document.addEventListener('touchmove', resizeMove, { passive: false });
+            document.addEventListener('touchend', resizeEnd, { passive: false });
+            document.addEventListener('touchcancel', resizeEnd, { passive: false });
+        } else {
+            document.addEventListener('mousemove', resizeMove);
+            document.addEventListener('mouseup', resizeEnd);
+        }
     }
 
     static selectSignature(element) {
+        // Deseleccionar todas las firmas
         document.querySelectorAll('.document-signature').forEach(sig => {
             sig.classList.remove('selected');
         });
         
+        // Seleccionar esta firma
         element.classList.add('selected');
+        
+        // En móvil, mostrar feedback visual
+        if (this.isTouchDevice) {
+            // Agregar pulso de selección
+            element.style.boxShadow = '0 0 0 3px rgba(47, 108, 70, 0.5)';
+            
+            // Quitar el efecto después de 1 segundo
+            setTimeout(() => {
+                element.style.boxShadow = '';
+            }, 1000);
+        }
     }
 
     static enableSignatureMode() {
