@@ -218,14 +218,31 @@ class CloudStorageService {
     // Documentos
     async saveDocument(doc) {
         try {
-            // Preparar documento para Firestore
+            // Preparar documento para Firestore - NUNCA guardar contenido base64
             const firestoreDoc = {
-                ...doc,
+                id: doc.id,
+                name: doc.name,
+                type: doc.type,
+                size: doc.size || 0,
                 uploadDate: firebase.firestore.FieldValue.serverTimestamp(),
-                lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                uploadedBy: doc.uploadedBy,
+                uploadedByName: doc.uploadedByName,
+                signatures: doc.signatures || [],
+                extension: doc.extension || doc.name.split('.').pop().toLowerCase(),
+                source: doc.source || 'uploaded',
+                storage_provider: 'supabase', // Siempre usar Supabase para almacenamiento
+                originalFileId: doc.originalFileId || null
             };
             
-            // Si hay contenido base64, intentar subirlo a Supabase
+            // Si tenemos datos de Supabase, agregarlos
+            if (doc.supabase_url) {
+                firestoreDoc.supabase_url = doc.supabase_url;
+                firestoreDoc.supabase_path = doc.supabase_path;
+                firestoreDoc.url = doc.supabase_url;
+            }
+            
+            // Si hay contenido base64, intentar subirlo a Supabase primero
             if (doc.content && doc.content.startsWith('data:')) {
                 try {
                     // Convertir base64 a Blob
@@ -235,37 +252,60 @@ class CloudStorageService {
                     // Subir a Supabase
                     const supabaseResult = await this.supabase.uploadFile(
                         new File([blob], doc.name, { type: doc.type }),
-                        `users/${doc.uploadedBy}`
+                        `users/${doc.uploadedBy}/converted`
                     );
                     
                     // Actualizar documento con URL de Supabase
                     firestoreDoc.supabase_url = supabaseResult.url;
                     firestoreDoc.supabase_path = supabaseResult.path;
                     firestoreDoc.url = supabaseResult.url;
-                    firestoreDoc.storage_provider = 'supabase';
                     
-                    // Eliminar contenido base64 para ahorrar espacio
-                    delete firestoreDoc.content;
+                    console.log('Archivo base64 convertido y subido a Supabase');
                     
                 } catch (uploadError) {
                     console.error('Error subiendo a Supabase:', uploadError);
-                    // Si falla Supabase, mantener el contenido base64 como fallback
-                    firestoreDoc.storage_provider = 'firestore';
+                    // Si falla, NO guardar el contenido base64 en Firestore
+                    // Solo guardar metadata básica
+                    firestoreDoc.storage_provider = 'none';
+                    firestoreDoc.error = 'No se pudo almacenar el archivo';
                 }
             }
             
-            // Si ya tiene URL de Supabase, marcar como tal
-            if (doc.supabase_url) {
-                firestoreDoc.storage_provider = 'supabase';
+            // Si tenemos URL local pero no de Supabase, intentar subir
+            if (doc.url && doc.url.startsWith('blob:') && !firestoreDoc.supabase_url) {
+                try {
+                    const response = await fetch(doc.url);
+                    const blob = await response.blob();
+                    
+                    const supabaseResult = await this.supabase.uploadFile(
+                        new File([blob], doc.name, { type: doc.type }),
+                        `users/${doc.uploadedBy}/uploaded`
+                    );
+                    
+                    firestoreDoc.supabase_url = supabaseResult.url;
+                    firestoreDoc.supabase_path = supabaseResult.path;
+                    firestoreDoc.url = supabaseResult.url;
+                    
+                } catch (uploadError) {
+                    console.error('Error subiendo blob a Supabase:', uploadError);
+                }
+            }
+            
+            // NUNCA guardar contenido base64 en Firestore
+            // Asegurarnos de que no exista la propiedad content
+            if (firestoreDoc.content) {
+                delete firestoreDoc.content;
             }
             
             // Guardar metadata en Firestore
-            await this.db.collection('documents').doc(doc.id).set(firestoreDoc);
+            await this.db.collection('documents').doc(doc.id).set(firestoreDoc, { merge: true });
+            
+            console.log('Documento guardado en Firestore (sin contenido base64):', doc.id);
             return firestoreDoc;
             
         } catch (error) {
             console.error('Error saving document to Firebase:', error);
-            throw error;
+            throw new Error('Error al guardar documento: ' + error.message);
         }
     }
 
@@ -644,6 +684,7 @@ class AuthService {
                 const storage = new CloudStorageService();
                 const userData = await storage.getUser(user.email);
                 
+                // En AuthService.initAuthListener, modifica esta sección:
                 if (userData) {
                     AuthService.setCurrentUser(userData);
                     
@@ -666,22 +707,20 @@ class AuthService {
                     document.getElementById('loginScreen').style.display = 'none';
                     document.getElementById('appContainer').classList.add('active');
                     
-                    // CARGAR ARCHIVOS CON MANEJO DE ERRORES
+                    // CARGAR ARCHIVOS SIN MOSTRAR NOTIFICACIONES INNECESARIAS
                     console.log('Cargando archivos del usuario...');
                     
                     try {
                         await FileService.loadUserDocuments();
                         console.log('Archivos cargados:', FileService.files.length);
                         
-                        // Contar archivos que se cargaron correctamente
-                        const loadedFiles = FileService.files.filter(f => !f.tooLarge).length;
+                        // SOLO mostrar notificación si hay archivos grandes
                         const largeFiles = FileService.files.filter(f => f.tooLarge).length;
                         
                         if (largeFiles > 0) {
-                            showNotification(`${loadedFiles} archivos cargados, ${largeFiles} archivos muy grandes (descárguelos para ver)`, 'warning');
-                        } else {
-                            showNotification(`${loadedFiles} archivos cargados correctamente`);
+                            showNotification(`${largeFiles} archivos muy grandes (descárguelos para ver)`, 'warning');
                         }
+                        // NO mostrar notificación de archivos cargados automáticamente
                         
                         DocumentService.renderDocumentSelector();
                         
@@ -691,7 +730,7 @@ class AuthService {
                         
                     } catch (error) {
                         console.error('Error al cargar archivos:', error);
-                        showNotification('Algunos archivos no se pudieron cargar. Intente recargar la página.', 'warning');
+                        // NO mostrar notificación aquí
                     }
                     
                     // Cargar actividades
@@ -722,27 +761,12 @@ class FileService {
             try {
                 const fileId = 'file_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
                 
-                // Comprimir archivo si es necesario (máximo aumentado a 2048KB)
-                let fileToUpload = file;
-                try {
-                    fileToUpload = await CompressionService.compressFile(file, 2048);
-                } catch (compressionError) {
-                    // Si no se puede comprimir, verificar si es demasiado grande
-                    if (fileToUpload.size > 50 * 1024 * 1024) {
-                        showNotification(`Error: ${file.name} excede 50MB (tamaño máximo de Supabase)`, 'error');
-                        continue;
-                    } else {
-                        showNotification(`Advertencia: ${compressionError.message}`, 'warning');
-                        // Continuar con el archivo original
-                    }
-                }
-                
                 // Preparar datos del archivo
                 const fileData = {
                     id: fileId,
                     name: file.name,
-                    type: fileToUpload.type,
-                    size: fileToUpload.size,
+                    type: file.type,
+                    size: file.size,
                     uploadDate: new Date(),
                     uploadedBy: AppState.currentUser.uid,
                     uploadedByName: AppState.currentUser.name,
@@ -751,38 +775,21 @@ class FileService {
                     source: 'uploaded'
                 };
                 
-                // Subir directamente a Supabase
-                try {
-                    showNotification(`Subiendo ${file.name} a la nube...`);
-                    
-                    // Subir a Supabase Storage
-                    const supabaseResult = await storage.supabase.uploadFile(
-                        fileToUpload,
-                        `users/${AppState.currentUser.uid}/uploads`
-                    );
-                    
-                    // Agregar URLs de Supabase
-                    fileData.supabase_url = supabaseResult.url;
-                    fileData.supabase_path = supabaseResult.path;
-                    fileData.url = supabaseResult.url;
-                    fileData.storage_provider = 'supabase';
-                    
-                    // Crear URL local temporal para vista previa inmediata
-                    fileData.local_url = URL.createObjectURL(file);
-                    
-                } catch (supabaseError) {
-                    console.error('Error subiendo a Supabase, usando base64 como fallback:', supabaseError);
-                    
-                    // Fallback: convertir a base64
-                    const base64Data = await this.fileToBase64(fileToUpload);
-                    fileData.content = base64Data;
-                    fileData.url = URL.createObjectURL(file);
-                    fileData.storage_provider = 'firestore';
-                    
-                    showNotification(`Subiendo ${file.name} (modo compatibilidad)...`, 'warning');
-                }
+                // Subir directamente a Supabase Storage
+                showNotification(`Subiendo ${file.name} a Supabase...`);
                 
-                // Guardar metadata en Firestore
+                const supabaseResult = await storage.supabase.uploadFile(
+                    file,
+                    `users/${AppState.currentUser.uid}/uploads`
+                );
+                
+                // Agregar URLs de Supabase
+                fileData.supabase_url = supabaseResult.url;
+                fileData.supabase_path = supabaseResult.path;
+                fileData.url = supabaseResult.url;
+                fileData.storage_provider = 'supabase';
+                
+                // Guardar metadata en Firestore (sin contenido base64)
                 await storage.saveDocument(fileData);
                 
                 uploadedFiles.push(fileData);
@@ -795,7 +802,7 @@ class FileService {
                     userName: AppState.currentUser.name
                 });
                 
-                showNotification(`Archivo ${file.name} subido correctamente`);
+                showNotification(`Archivo ${file.name} subido correctamente a Supabase`);
                 
             } catch (error) {
                 console.error('Error uploading file:', error);
@@ -3074,25 +3081,101 @@ DocumentService.saveDocumentWithSignatures = async function() {
         return;
     }
     
-    showNotification('Guardando documento firmado...');
+    showNotification('Guardando documento firmado en la nube...');
     
     try {
         const result = await DocumentExportService.combineSignaturesWithDocument();
         
-        // Solo guardamos en la nube
-        await FileService.addSignedDocument(
-            this.currentDocument.id,
-            result.blob,
-            result.fileName,
-            this.documentSignatures
+        // AGREGAR firmante actual a las firmas si no está
+        const currentUserSignature = {
+            userName: AppState.currentUser.name,
+            userEmail: AppState.currentUser.email,
+            timestamp: new Date(),
+            type: AppState.currentSignature?.type || 'auto'
+        };
+        
+        // Verificar si el usuario actual ya firmó
+        const alreadySigned = this.documentSignatures.some(sig => 
+            sig.userEmail === AppState.currentUser.email
         );
         
+        if (!alreadySigned) {
+            this.documentSignatures.push(currentUserSignature);
+        }
+        
+        // Subir directamente a Supabase
+        const storage = new CloudStorageService();
+        
+        // Crear nombre para el archivo firmado
+        const originalName = this.currentDocument.name;
+        const extensionIndex = originalName.lastIndexOf('.');
+        let signedFileName;
+        
+        if (extensionIndex !== -1) {
+            const nameWithoutExt = originalName.substring(0, extensionIndex);
+            const extension = originalName.substring(extensionIndex);
+            signedFileName = `${nameWithoutExt} (Firmado)${extension}`;
+        } else {
+            signedFileName = `${originalName} (Firmado)`;
+        }
+        
+        // Crear File desde Blob
+        const signedFile = new File([result.blob], signedFileName, { 
+            type: result.type 
+        });
+        
+        // Subir a Supabase Storage
+        showNotification('Subiendo a Supabase Storage...');
+        
+        const supabaseResult = await storage.supabase.uploadFile(
+            signedFile,
+            `users/${AppState.currentUser.uid}/signed_documents`
+        );
+        
+        // Crear metadata del archivo firmado
+        const signedFileData = {
+            id: 'signed_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+            name: signedFileName,
+            type: result.type,
+            size: result.blob.size,
+            uploadDate: new Date(),
+            uploadedBy: AppState.currentUser.uid,
+            uploadedByName: AppState.currentUser.name,
+            signatures: this.documentSignatures,
+            extension: signedFileName.split('.').pop().toLowerCase(),
+            source: 'signed',
+            originalFileId: this.currentDocument.id,
+            supabase_url: supabaseResult.url,
+            supabase_path: supabaseResult.path,
+            url: supabaseResult.url,
+            storage_provider: 'supabase'
+        };
+        
+        // Guardar metadata en Firestore
+        await storage.saveDocument(signedFileData);
+        
+        // Agregar al array local de archivos
+        FileService.files.push(signedFileData);
+        
+        // Actualizar las vistas
         this.documentSignatures = [];
         this.renderExistingSignatures();
         this.renderSignaturesList();
+        FileService.renderFilesGrid();
+        DocumentService.renderDocumentSelector();
         
-        showNotification('Documento firmado guardado exitosamente en la nube.');
-
+        // Guardar actividad
+        await storage.saveActivity({
+            type: 'document_signed',
+            description: `Firmó el documento: ${signedFileName}`,
+            documentName: signedFileName,
+            userName: AppState.currentUser.name
+        });
+        
+        showNotification(`Documento firmado guardado exitosamente en Supabase: ${signedFileName}`);
+        
+        return signedFileData;
+        
     } catch (error) {
         console.error('Error al guardar documento con firmas:', error);
         showNotification('Error al guardar el documento: ' + error.message, 'error');
@@ -3364,7 +3447,8 @@ function switchPage(pageId) {
     if (pageId === 'files') {
         FileService.renderFilesGrid();
         
-        // Agregar botón de migración si no existe - con timeout para asegurar que el DOM esté listo
+        // ELIMINAR O COMENTAR ESTE BLOQUE COMPLETO
+        /*
         setTimeout(() => {
             const filesHeader = document.querySelector('#files-page .header');
             if (filesHeader && !document.getElementById('migrateBtn')) {
@@ -3391,6 +3475,7 @@ function switchPage(pageId) {
                 }
             }
         }, 100);
+        */
     } else if (pageId === 'collaborators') {
         CollaborationService.renderCollaborators();
     } else if (pageId === 'documents') {
