@@ -1137,13 +1137,20 @@ class FileService {
                         </div>
                         <div class="signers-icons-container">
                             ${displayedSigners.map(signer => `
-                                <div class="signer-icon-wrapper" title="${signer.userName || 'Usuario'}">
+                                <div class="signer-icon-wrapper" 
+                                     data-signer-name="${signer.userName || 'Usuario'}" 
+                                     data-signer-date="${signer.timestamp ? new Date(signer.timestamp).toLocaleDateString() : 'Fecha desconocida'}"
+                                     onclick="FileService.showSignerTooltip(event, this)">
                                     <div class="signer-avatar-small">${signer.userName?.substring(0, 1).toUpperCase() || '?'}</div>
+                                    <div class="signer-name-tooltip">${signer.userName || 'Usuario'}</div>
                                 </div>
                             `).join('')}
                             ${extraCount > 0 ? `
-                                <div class="signer-icon-wrapper signer-more" title="${extraCount} persona(s) más">
+                                <div class="signer-icon-wrapper signer-more" 
+                                     data-signer-name="${extraCount} persona(s) más" 
+                                     onclick="FileService.showSignerTooltip(event, this)">
                                     <div class="signer-avatar-small">+${extraCount}</div>
+                                    <div class="signer-name-tooltip">${extraCount} persona(s) más</div>
                                 </div>
                             ` : ''}
                         </div>
@@ -1192,6 +1199,55 @@ class FileService {
         `;
         
         return fileCard;
+    }
+
+    // ===========================================
+    // NUEVA FUNCIÓN: showSignerTooltip
+    // ===========================================
+    static showSignerTooltip(event, element) {
+        event.stopPropagation();
+        
+        const tooltip = document.getElementById('globalTooltip');
+        if (!tooltip) return;
+        
+        const signerName = element.getAttribute('data-signer-name') || 'Firmante';
+        const signerDate = element.getAttribute('data-signer-date') || '';
+        
+        // Contenido del tooltip
+        let tooltipContent = `<strong>${signerName}</strong>`;
+        if (signerDate) {
+            tooltipContent += `<br><small>Fecha: ${signerDate}</small>`;
+        }
+        
+        // Posicionar el tooltip
+        const rect = element.getBoundingClientRect();
+        const x = rect.left + (rect.width / 2);
+        const y = rect.top - 10; // 10px arriba del elemento
+        
+        tooltip.innerHTML = tooltipContent;
+        tooltip.style.left = `${x}px`;
+        tooltip.style.top = `${y}px`;
+        tooltip.classList.add('show');
+        
+        // Remover tooltip después de 3 segundos (solo en móvil) o al tocar en otro lugar
+        const isMobile = window.innerWidth <= 768;
+        if (isMobile) {
+            setTimeout(() => {
+                tooltip.classList.remove('show');
+            }, 3000);
+        }
+        
+        // También remover al tocar en cualquier otro lugar
+        const removeTooltip = (e) => {
+            if (e.target !== element && !element.contains(e.target)) {
+                tooltip.classList.remove('show');
+                document.removeEventListener('click', removeTooltip);
+                document.removeEventListener('touchstart', removeTooltip);
+            }
+        };
+        
+        document.addEventListener('click', removeTooltip);
+        document.addEventListener('touchstart', removeTooltip, { passive: true });
     }
 
     static async previewFile(fileId) {
@@ -2212,7 +2268,11 @@ class DocumentService {
         return signatureElement;
     }
 
+    // ===========================================
+    // MODIFICADA: makeSignatureInteractive con eventos táctiles
+    // ===========================================
     static makeSignatureInteractive(element, signatureData) {
+        // Eventos para mouse (ya existen)
         element.addEventListener('mousedown', (e) => {
             if (e.target.classList.contains('signature-handle')) {
                 this.startResize(e, element, signatureData);
@@ -2225,43 +2285,121 @@ class DocumentService {
             e.stopPropagation();
             this.selectSignature(element);
         });
+
+        // ✅ AGREGAR EVENTOS TÁCTILES PARA MÓVIL
+        element.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const touch = e.touches[0];
+            const target = document.elementFromPoint(touch.clientX, touch.clientY);
+            
+            // Temporizador para detectar toque largo (para seleccionar sin arrastrar)
+            element.touchTimer = setTimeout(() => {
+                // Toque largo - seleccionar firma
+                this.selectSignature(element);
+            }, 500);
+            
+            if (target && target.classList.contains('signature-handle')) {
+                // Clonar el evento para simular mouse event
+                const mouseEvent = new MouseEvent('mousedown', {
+                    clientX: touch.clientX,
+                    clientY: touch.clientY,
+                    target: target
+                });
+                this.startResize(mouseEvent, element, signatureData);
+            } else {
+                const mouseEvent = new MouseEvent('mousedown', {
+                    clientX: touch.clientX,
+                    clientY: touch.clientY,
+                    target: element
+                });
+                this.startDrag(mouseEvent, element, signatureData);
+            }
+        }, { passive: false });
+        
+        element.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (element.touchTimer) {
+                clearTimeout(element.touchTimer);
+            }
+            // Toque corto - también seleccionar
+            this.selectSignature(element);
+        }, { passive: false });
+        
+        element.addEventListener('touchmove', (e) => {
+            if (element.touchTimer) {
+                clearTimeout(element.touchTimer);
+            }
+        }, { passive: false });
     }
 
+    // ===========================================
+    // MODIFICADA: startDrag para eventos táctiles
+    // ===========================================
     static startDrag(e, element, signatureData) {
         e.preventDefault();
+        e.stopPropagation();
+        
         this.isDraggingSignature = true;
         this.currentDraggingSignature = { element, signatureData };
 
-        const startX = e.clientX;
-        const startY = e.clientY;
+        // Obtener coordenadas iniciales (compatibilidad con touch)
+        const isTouch = e.type.includes('touch');
+        const startX = isTouch ? e.touches[0].clientX : e.clientX;
+        const startY = isTouch ? e.touches[0].clientY : e.clientY;
         const startLeft = parseFloat(element.style.left);
         const startTop = parseFloat(element.style.top);
 
-        function dragMove(e) {
+        function dragMove(moveEvent) {
             if (!DocumentService.isDraggingSignature) return;
             
-            const dx = e.clientX - startX;
-            const dy = e.clientY - startY;
+            const currentX = isTouch ? moveEvent.touches[0].clientX : moveEvent.clientX;
+            const currentY = isTouch ? moveEvent.touches[0].clientY : moveEvent.clientY;
+            
+            const dx = currentX - startX;
+            const dy = currentY - startY;
             
             const newLeft = Math.max(0, startLeft + dx);
             const newTop = Math.max(0, startTop + dy);
             
-            element.style.left = newLeft + 'px';
-            element.style.top = newTop + 'px';
+            // Limitar al área del documento
+            const canvas = document.getElementById('documentCanvas');
+            if (canvas) {
+                const maxX = canvas.clientWidth - element.clientWidth;
+                const maxY = canvas.clientHeight - element.clientHeight;
+                
+                element.style.left = Math.min(maxX, newLeft) + 'px';
+                element.style.top = Math.min(maxY, newTop) + 'px';
+            } else {
+                element.style.left = newLeft + 'px';
+                element.style.top = newTop + 'px';
+            }
             
-            signatureData.x = newLeft;
-            signatureData.y = newTop;
+            signatureData.x = parseFloat(element.style.left);
+            signatureData.y = parseFloat(element.style.top);
         }
 
         function dragEnd() {
             DocumentService.isDraggingSignature = false;
             DocumentService.currentDraggingSignature = null;
-            document.removeEventListener('mousemove', dragMove);
-            document.removeEventListener('mouseup', dragEnd);
+            
+            if (isTouch) {
+                document.removeEventListener('touchmove', dragMove);
+                document.removeEventListener('touchend', dragEnd);
+            } else {
+                document.removeEventListener('mousemove', dragMove);
+                document.removeEventListener('mouseup', dragEnd);
+            }
         }
 
-        document.addEventListener('mousemove', dragMove);
-        document.addEventListener('mouseup', dragEnd);
+        if (isTouch) {
+            document.addEventListener('touchmove', dragMove, { passive: false });
+            document.addEventListener('touchend', dragEnd, { passive: false });
+        } else {
+            document.addEventListener('mousemove', dragMove);
+            document.addEventListener('mouseup', dragEnd);
+        }
     }
 
     static startResize(e, element, signatureData) {
@@ -3563,6 +3701,56 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         }, { passive: false });
+    }
+    
+    // ===========================================
+    // NUEVO: Zoom táctil (pinch to zoom)
+    // ===========================================
+    if (viewerContent) {
+        let initialDistance = null;
+        let lastZoomTime = 0;
+        
+        viewerContent.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 2) {
+                initialDistance = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                e.preventDefault();
+            }
+        }, { passive: false });
+        
+        viewerContent.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 2 && initialDistance) {
+                const currentTime = Date.now();
+                // Limitar la frecuencia de zoom para evitar sobrecarga
+                if (currentTime - lastZoomTime < 100) return;
+                
+                const currentDistance = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                
+                const distanceDiff = currentDistance - initialDistance;
+                
+                if (Math.abs(distanceDiff) > 20) {
+                    if (distanceDiff > 0) {
+                        // Pellizco hacia afuera - zoom in
+                        DocumentService.zoomIn();
+                    } else {
+                        // Pellizco hacia adentro - zoom out
+                        DocumentService.zoomOut();
+                    }
+                    lastZoomTime = currentTime;
+                    initialDistance = currentDistance;
+                    e.preventDefault();
+                }
+            }
+        }, { passive: false });
+        
+        viewerContent.addEventListener('touchend', () => {
+            initialDistance = null;
+        });
     }
     
     document.addEventListener('keydown', function(e) {

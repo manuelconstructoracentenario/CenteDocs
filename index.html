@@ -501,6 +501,25 @@
             </div>
         </div>
     </div>
+    
+    <!-- Menú flotante para móvil -->
+    <div class="mobile-floating-menu" id="mobileFloatingMenu">
+        <button class="mobile-floating-btn" id="mobileSaveBtn" title="Guardar documento firmado">
+            <i class="fas fa-save"></i>
+            <span class="mobile-btn-text">Guardar</span>
+        </button>
+        <button class="mobile-floating-btn" id="mobileAddSignatureBtn" title="Agregar firma">
+            <i class="fas fa-signature"></i>
+            <span class="mobile-btn-text">Firma</span>
+        </button>
+        <button class="mobile-floating-btn" id="mobilePreviewBtn" title="Previsualizar">
+            <i class="fas fa-eye"></i>
+            <span class="mobile-btn-text">Ver</span>
+        </button>
+    </div>
+
+    <!-- Tooltip global para firmantes (funciona en móvil y desktop) -->
+    <div class="global-tooltip" id="globalTooltip"></div>
 
     <!-- Agregar las dependencias necesarias -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
