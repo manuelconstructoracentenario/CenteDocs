@@ -2600,8 +2600,8 @@
 
     /* Aumentar el tamaño de las firmas en el documento */
     .document-signature {
-        min-width: 130px !important; /* Aumentado de 120px a 130px */
-        min-height: 70px !important; /* Aumentado de 60px a 70px */
+        min-width: 80px !important; /* Aumentado de 120px a 130px */
+        min-height: 40px !important; /* Aumentado de 60px a 70px */
     }
 
     .signature-img {
@@ -5118,4 +5118,87 @@
         min-width: 140px !important;
         min-height: 70px !important;
     }
+}
+
+/* =========================================== */
+/* AJUSTES PARA FIRMAS MÁS PEQUEÑAS */
+/* =========================================== */
+
+/* Reducir tamaño mínimo de las firmas */
+.document-signature {
+    min-width: 80px !important;  /* Reducido de 100px */
+    min-height: 40px !important; /* Reducido de 50px */
+}
+
+/* Ajustar handles para firmas más pequeñas */
+.signature-handle {
+    width: 16px !important;  /* Reducido de 20px */
+    height: 16px !important; /* Reducido de 20px */
+}
+
+.handle-top-left {
+    top: -8px !important;    /* Ajustado */
+    left: -8px !important;   /* Ajustado */
+}
+
+.handle-top-right {
+    top: -8px !important;    /* Ajustado */
+    right: -8px !important;  /* Ajustado */
+}
+
+.handle-bottom-left {
+    bottom: -8px !important; /* Ajustado */
+    left: -8px !important;   /* Ajustado */
+}
+
+.handle-bottom-right {
+    bottom: -8px !important; /* Ajustado */
+    right: -8px !important;  /* Ajustado */
+}
+
+/* Para móvil - ajustes proporcionales */
+@media (max-width: 768px) {
+    .document-signature {
+        min-width: 100px !important;  /* Reducido de 120px */
+        min-height: 50px !important;  /* Reducido de 60px */
+    }
+    
+    .signature-handle {
+        width: 20px !important;  /* Reducido de 25px */
+        height: 20px !important; /* Reducido de 25px */
+    }
+    
+    .handle-top-left {
+        top: -10px !important;   /* Ajustado */
+        left: -10px !important;  /* Ajustado */
+    }
+    
+    .handle-top-right {
+        top: -10px !important;   /* Ajustado */
+        right: -10px !important; /* Ajustado */
+    }
+    
+    .handle-bottom-left {
+        bottom: -10px !important; /* Ajustado */
+        left: -10px !important;   /* Ajustado */
+    }
+    
+    .handle-bottom-right {
+        bottom: -10px !important; /* Ajustado */
+        right: -10px !important;  /* Ajustado */
+    }
+}
+
+/* Mejorar la previsualización de firma automática */
+.auto-signature-preview {
+    min-height: 100px !important; /* Reducido de 130px */
+}
+
+.auto-signature-preview img {
+    max-height: 80px !important; /* Reducido de 110px */
+}
+
+/* Ajustar tamaño del panel de firma */
+.signature-panel {
+    max-height: 380px !important; /* Reducido de 400px */
 }
