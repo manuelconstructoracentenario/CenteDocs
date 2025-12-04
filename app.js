@@ -1816,6 +1816,49 @@ class DocumentService {
     }
 
     // ===========================================
+    // REEMPLAZAR LA FUNCIÓN findSignaturePosition() COMPLETA
+    // ===========================================
+
+    static async findSignaturePosition() {
+        return new Promise(async (resolve, reject) => {
+            try {
+                if (!this.currentDocument) {
+                    resolve({ x: 100, y: 100 }); // Posición por defecto
+                    return;
+                }
+                
+                const canvas = document.getElementById('documentCanvas');
+                if (!canvas) {
+                    resolve({ x: 100, y: 100 });
+                    return;
+                }
+                
+                const width = canvas.width;
+                const height = canvas.height;
+                
+                // Inteligencia para buscar espacios de firma
+                let position = await this.analyzeDocumentForSignatureSpace(canvas);
+                
+                // Si no se encontró un buen espacio, usar posiciones comunes
+                if (!position || position.x < 0 || position.y < 0) {
+                    position = this.getCommonSignaturePositions(width, height);
+                }
+                
+                // Asegurar que esté dentro del canvas
+                position.x = Math.max(50, Math.min(position.x, width - 250));
+                position.y = Math.max(50, Math.min(position.y, height - 100));
+                
+                console.log('Posición de firma encontrada:', position);
+                resolve(position);
+                
+            } catch (error) {
+                console.error('Error finding signature position:', error);
+                resolve({ x: 100, y: 100 }); // Posición por defecto en caso de error
+            }
+        });
+    }
+
+    // ===========================================
     // NUEVA FUNCIÓN: Analizar documento para encontrar espacio de firma
     // ===========================================
 
@@ -1914,6 +1957,164 @@ class DocumentService {
                 resolve({ x: -1, y: -1 });
             }
         });
+    }
+
+    // ===========================================
+    // FUNCIONES AUXILIARES PARA ANÁLISIS DE DOCUMENTO
+    // ===========================================
+
+    static sampleCell(ctx, x, y, width, height) {
+        const samples = [];
+        const sampleCount = 5;
+        
+        for (let i = 0; i < sampleCount; i++) {
+            const sampleX = x + Math.random() * width;
+            const sampleY = y + Math.random() * height;
+            
+            // Obtener datos de píxel
+            const imageData = ctx.getImageData(sampleX, sampleY, 1, 1).data;
+            samples.push({
+                r: imageData[0],
+                g: imageData[1],
+                b: imageData[2],
+                a: imageData[3]
+            });
+        }
+        
+        return samples;
+    }
+
+    static calculateBrightnessScore(samples) {
+        // Calcular el brillo promedio (0-255, donde 255 es blanco)
+        let totalBrightness = 0;
+        
+        samples.forEach(sample => {
+            // Fórmula de luminosidad perceptual
+            const brightness = 0.299 * sample.r + 0.587 * sample.g + 0.114 * sample.b;
+            totalBrightness += brightness;
+        });
+        
+        const avgBrightness = totalBrightness / samples.length;
+        
+        // Normalizar a 0-1 (más brillante = mejor)
+        return avgBrightness / 255;
+    }
+
+    static calculateDistanceScore(x, y) {
+        // Calcular distancia a firmas existentes
+        if (this.documentSignatures.length === 0) {
+            return 1; // Máxima puntuación si no hay firmas
+        }
+        
+        let minDistance = Infinity;
+        
+        this.documentSignatures.forEach(signature => {
+            const distance = Math.sqrt(
+                Math.pow(x - (signature.x + signature.width/2), 2) + 
+                Math.pow(y - (signature.y + signature.height/2), 2)
+            );
+            
+            if (distance < minDistance) {
+                minDistance = distance;
+            }
+        });
+        
+        // Normalizar: más distancia = mejor (no superponer)
+        // Considerar buena distancia si está a más de 200 píxeles
+        const goodDistance = 200;
+        return Math.min(minDistance / goodDistance, 1);
+    }
+
+    static calculatePositionScore(x, y, width, height) {
+        // Preferir esquina inferior derecha para firmas
+        const rightBias = 1 - (x / width); // Más cerca de la derecha = mejor
+        const bottomBias = 1 - (y / height); // Más cerca del fondo = mejor
+        
+        return (rightBias * 0.7 + bottomBias * 0.3);
+    }
+
+    static getCommonSignaturePositions(width, height) {
+        // Posiciones comunes donde se colocan las firmas
+        const positions = [
+            { x: width * 0.75, y: height * 0.85 }, // Esquina inferior derecha
+            { x: width * 0.7, y: height * 0.8 },   // Centro-derecha inferior
+            { x: width * 0.1, y: height * 0.85 },  // Esquina inferior izquierda
+            { x: width * 0.5, y: height * 0.9 },   // Centro inferior
+            { x: width * 0.3, y: height * 0.85 }   // Centro-izquierda inferior
+        ];
+        
+        // Filtrar posiciones ocupadas por otras firmas
+        const availablePositions = positions.filter(position => {
+            for (const sig of this.documentSignatures) {
+                const distance = Math.sqrt(
+                    Math.pow(position.x - (sig.x + sig.width/2), 2) + 
+                    Math.pow(position.y - (sig.y + sig.height/2), 2)
+                );
+                
+                if (distance < 150) { // Si hay una firma muy cerca
+                    return false;
+                }
+            }
+            return true;
+        });
+        
+        // Si hay posiciones disponibles, usar la primera
+        if (availablePositions.length > 0) {
+            return availablePositions[0];
+        }
+        
+        // Si todas están ocupadas, crear nueva posición al lado de la última firma
+        if (this.documentSignatures.length > 0) {
+            const lastSig = this.documentSignatures[this.documentSignatures.length - 1];
+            return {
+                x: lastSig.x + lastSig.width + 20,
+                y: lastSig.y
+            };
+        }
+        
+        // Si no hay firmas, usar la primera posición
+        return positions[0];
+    }
+
+    static findSignatureLines(ctx, searchArea) {
+        // Buscar líneas horizontales (posibles líneas de firma)
+        const lines = [];
+        const scanStep = 5; // Escanear cada 5 píxeles
+        
+        for (let y = searchArea.y; y < searchArea.y + searchArea.height; y += scanStep) {
+            let lineStart = null;
+            let lineLength = 0;
+            
+            for (let x = searchArea.x; x < searchArea.x + searchArea.width; x++) {
+                const imageData = ctx.getImageData(x, y, 1, 1).data;
+                const brightness = 0.299 * imageData[0] + 0.587 * imageData[1] + 0.114 * imageData[2];
+                
+                // Detectar píxeles oscuros (líneas)
+                if (brightness < 100) {
+                    if (lineStart === null) {
+                        lineStart = x;
+                    }
+                    lineLength++;
+                } else {
+                    if (lineStart !== null && lineLength > 50) { // Línea de al menos 50 píxeles
+                        lines.push({
+                            x: lineStart,
+                            y: y,
+                            width: lineLength,
+                            height: 1
+                        });
+                    }
+                    lineStart = null;
+                    lineLength = 0;
+                }
+            }
+        }
+        
+        // Filtrar líneas que probablemente sean de firma (más largas y en el tercio inferior)
+        return lines.filter(line => 
+            line.width > 100 && // Al menos 100 píxeles de largo
+            line.y > searchArea.y + (searchArea.height * 0.5) // En la mitad inferior del área de búsqueda
+        );
     }
 
     // ===========================================
