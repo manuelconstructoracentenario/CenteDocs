@@ -4571,3 +4571,551 @@
         display: none !important;
     }
 }
+
+/* =========================================== */
+/* ESTILOS CRÍTICOS PARA FIRMAS EN MÓVIL */
+/* =========================================== */
+
+/* Asegurar que las firmas sean interactivas */
+.document-signature {
+    position: absolute !important;
+    border: 2px dashed #2f6c46 !important;
+    background: rgba(47, 108, 70, 0.1) !important;
+    cursor: move !important;
+    z-index: 1000 !important;
+    pointer-events: auto !important;
+    min-width: 100px !important;
+    min-height: 50px !important;
+    box-sizing: border-box !important;
+    touch-action: none !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -webkit-tap-highlight-color: transparent !important;
+}
+
+/* Firmas seleccionadas */
+.document-signature.selected {
+    border: 2px solid #599d5e !important;
+    background: rgba(89, 157, 94, 0.2) !important;
+    box-shadow: 0 0 0 3px rgba(89, 157, 94, 0.3) !important;
+}
+
+/* Handles para redimensionar */
+.signature-handle {
+    position: absolute !important;
+    width: 20px !important;
+    height: 20px !important;
+    background: #599d5e !important;
+    border: 2px solid white !important;
+    border-radius: 50% !important;
+    cursor: pointer !important;
+    z-index: 1001 !important;
+    pointer-events: auto !important;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3) !important;
+    touch-action: none !important;
+}
+
+/* Posiciones de handles */
+.handle-top-left {
+    top: -10px !important;
+    left: -10px !important;
+}
+
+.handle-top-right {
+    top: -10px !important;
+    right: -10px !important;
+}
+
+.handle-bottom-left {
+    bottom: -10px !important;
+    left: -10px !important;
+}
+
+.handle-bottom-right {
+    bottom: -10px !important;
+    right: -10px !important;
+}
+
+/* Imagen dentro de la firma */
+.document-signature img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain !important;
+    pointer-events: none !important;
+    background: transparent !important;
+}
+
+/* Para móvil - handles más grandes */
+@media (max-width: 768px) {
+    .document-signature {
+        min-width: 120px !important;
+        min-height: 60px !important;
+        border-width: 3px !important;
+    }
+    
+    .signature-handle {
+        width: 25px !important;
+        height: 25px !important;
+    }
+    
+    .handle-top-left {
+        top: -12px !important;
+        left: -12px !important;
+    }
+    
+    .handle-top-right {
+        top: -12px !important;
+        right: -12px !important;
+    }
+    
+    .handle-bottom-left {
+        bottom: -12px !important;
+        left: -12px !important;
+    }
+    
+    .handle-bottom-right {
+        bottom: -12px !important;
+        right: -12px !important;
+    }
+}
+
+/* Feedback visual para toques */
+.document-signature:active {
+    opacity: 0.9 !important;
+    transform: scale(0.98) !important;
+}
+
+/* Indicador de que se puede arrastrar */
+.document-signature::after {
+    content: '⇲' !important;
+    position: absolute !important;
+    top: 5px !important;
+    right: 5px !important;
+    font-size: 12px !important;
+    color: #2f6c46 !important;
+    background: white !important;
+    width: 20px !important;
+    height: 20px !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    opacity: 0.7 !important;
+    pointer-events: none !important;
+}
+
+/* Asegurar que la capa de firmas permita interacción */
+.signature-layer {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    pointer-events: none !important;
+}
+
+.signature-layer * {
+    pointer-events: auto !important;
+}
+
+/* Prevenir interferencia del contenedor */
+.document-container {
+    pointer-events: auto !important;
+}
+
+.document-container * {
+    pointer-events: auto !important;
+}
+
+/* Efecto de selección para móvil */
+@keyframes pulse-mobile {
+    0% { box-shadow: 0 0 0 0 rgba(47, 108, 70, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(47, 108, 70, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(47, 108, 70, 0); }
+}
+
+.document-signature.selected.mobile-selected {
+    animation: pulse-mobile 1s ease !important;
+}
+
+/* Clase especial para móvil */
+.document-signature.mobile-touch-enabled {
+    touch-action: none !important;
+}
+
+/* =========================================== */
+/* MEJORAS CRÍTICAS PARA FIRMAS EN MÓVIL */
+/* =========================================== */
+
+/* Asegurar que las firmas sean interactivas en todos los dispositivos */
+.document-signature {
+    position: absolute !important;
+    border: 2px dashed #2f6c46 !important;
+    background: rgba(47, 108, 70, 0.1) !important;
+    cursor: move !important;
+    z-index: 1000 !important;
+    pointer-events: auto !important;
+    min-width: 100px !important;
+    min-height: 50px !important;
+    box-sizing: border-box !important;
+    touch-action: none !important;
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    -webkit-tap-highlight-color: transparent !important;
+}
+
+/* Firmas seleccionadas */
+.document-signature.selected {
+    border: 2px solid #599d5e !important;
+    background: rgba(89, 157, 94, 0.2) !important;
+    box-shadow: 0 0 0 3px rgba(89, 157, 94, 0.3) !important;
+}
+
+/* Handles para redimensionar */
+.signature-handle {
+    position: absolute !important;
+    width: 20px !important;
+    height: 20px !important;
+    background: #599d5e !important;
+    border: 2px solid white !important;
+    border-radius: 50% !important;
+    cursor: pointer !important;
+    z-index: 1001 !important;
+    pointer-events: auto !important;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3) !important;
+    touch-action: none !important;
+}
+
+/* Posiciones de handles */
+.handle-top-left {
+    top: -10px !important;
+    left: -10px !important;
+}
+
+.handle-top-right {
+    top: -10px !important;
+    right: -10px !important;
+}
+
+.handle-bottom-left {
+    bottom: -10px !important;
+    left: -10px !important;
+}
+
+.handle-bottom-right {
+    bottom: -10px !important;
+    right: -10px !important;
+}
+
+/* Imagen dentro de la firma */
+.document-signature img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain !important;
+    pointer-events: none !important;
+    background: transparent !important;
+}
+
+/* Para móvil - handles más grandes */
+@media (max-width: 768px) {
+    .document-signature {
+        min-width: 120px !important;
+        min-height: 60px !important;
+        border-width: 3px !important;
+    }
+    
+    .signature-handle {
+        width: 25px !important;
+        height: 25px !important;
+    }
+    
+    .handle-top-left {
+        top: -12px !important;
+        left: -12px !important;
+    }
+    
+    .handle-top-right {
+        top: -12px !important;
+        right: -12px !important;
+    }
+    
+    .handle-bottom-left {
+        bottom: -12px !important;
+        left: -12px !important;
+    }
+    
+    .handle-bottom-right {
+        bottom: -12px !important;
+        right: -12px !important;
+    }
+}
+
+/* Feedback visual para toques */
+.document-signature:active {
+    opacity: 0.9 !important;
+    transform: scale(0.98) !important;
+}
+
+/* Indicador de que se puede arrastrar */
+.document-signature::after {
+    content: '⇲' !important;
+    position: absolute !important;
+    top: 5px !important;
+    right: 5px !important;
+    font-size: 12px !important;
+    color: #2f6c46 !important;
+    background: white !important;
+    width: 20px !important;
+    height: 20px !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    opacity: 0.7 !important;
+    pointer-events: none !important;
+}
+
+/* Asegurar que la capa de firmas permita interacción */
+.signature-layer {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    pointer-events: none !important;
+}
+
+.signature-layer * {
+    pointer-events: auto !important;
+}
+
+/* Prevenir interferencia del contenedor */
+.document-container {
+    pointer-events: auto !important;
+}
+
+.document-container * {
+    pointer-events: auto !important;
+}
+
+/* Efecto de selección para móvil */
+@keyframes pulse-mobile {
+    0% { box-shadow: 0 0 0 0 rgba(47, 108, 70, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(47, 108, 70, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(47, 108, 70, 0); }
+}
+
+.document-signature.selected.mobile-selected {
+    animation: pulse-mobile 1s ease !important;
+}
+
+/* Clase especial para móvil */
+.document-signature.mobile-touch-enabled {
+    touch-action: none !important;
+}
+
+/* =========================================== */
+/* MEJORAS PARA EL MODAL DE PREVISUALIZACIÓN */
+/* =========================================== */
+
+.preview-modal-content {
+    background: white !important;
+    border-radius: 12px !important;
+    max-width: 90% !important;
+    max-height: 90vh !important;
+    overflow: auto !important;
+    position: relative !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+.preview-modal-close {
+    position: absolute !important;
+    top: 15px !important;
+    right: 15px !important;
+    background: #e74c3c !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 50% !important;
+    width: 30px !important;
+    height: 30px !important;
+    cursor: pointer !important;
+    z-index: 10 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 16px !important;
+}
+
+/* =========================================== */
+/* CORRECCIONES PARA EL ZOOM EN MÓVIL */
+/* =========================================== */
+
+@media (max-width: 768px) {
+    .document-container {
+        transform-origin: 0 0 !important;
+    }
+    
+    #documentCanvas {
+        touch-action: pan-x pan-y pinch-zoom !important;
+    }
+    
+    .viewer-content {
+        overflow: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+    }
+}
+
+/* =========================================== */
+/* MEJORAS PARA EL SCROLL EN MÓVIL */
+/* =========================================== */
+
+@media (max-width: 768px) {
+    .signature-area {
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        max-height: 300px !important;
+    }
+    
+    .auto-signature-area {
+        max-height: 200px !important;
+        overflow-y: auto !important;
+    }
+}
+
+/* =========================================== */
+/* BOTÓN DE GUARDAR DESTACADO EN MÓVIL */
+/* =========================================== */
+
+@media (max-width: 768px) {
+    #saveDocumentWithSignatures {
+        background: linear-gradient(135deg, #2f6c46 0%, #478252 100%) !important;
+        color: white !important;
+        font-weight: 700 !important;
+        padding: 16px 24px !important;
+        font-size: 16px !important;
+        border-radius: 10px !important;
+        box-shadow: 0 4px 15px rgba(47, 108, 70, 0.4) !important;
+        border: none !important;
+        margin: 10px 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 10px !important;
+    }
+    
+    #saveDocumentWithSignatures:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 20px rgba(47, 108, 70, 0.6) !important;
+    }
+    
+    #saveDocumentWithSignatures i {
+        font-size: 18px !important;
+    }
+}
+
+/* =========================================== */
+/* CORRECCIÓN PARA LA VISUALIZACIÓN DE PDF */
+/* =========================================== */
+
+.preview-pdf {
+    width: 100% !important;
+    height: 70vh !important;
+    min-height: 500px !important;
+    border: none !important;
+}
+
+/* =========================================== */
+/* MEJORAS PARA EL TOOLTIP GLOBAL */
+/* =========================================== */
+
+.global-tooltip {
+    position: fixed !important;
+    background: rgba(0, 0, 0, 0.85) !important;
+    color: white !important;
+    padding: 8px 12px !important;
+    border-radius: 6px !important;
+    font-size: 13px !important;
+    max-width: 200px !important;
+    z-index: 9999 !important;
+    display: none !important;
+    pointer-events: none !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+    backdrop-filter: blur(4px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    transform: translate(-50%, -100%) !important;
+    text-align: center !important;
+    word-break: break-word !important;
+}
+
+.global-tooltip.show {
+    display: block !important;
+    animation: tooltipFadeIn 0.2s ease !important;
+}
+
+@keyframes tooltipFadeIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -90%);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -100%);
+    }
+}
+
+/* =========================================== */
+/* CORRECCIONES PARA LA FIRMA AUTOMÁTICA */
+/* =========================================== */
+
+.auto-signature-preview {
+    min-height: 130px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 10px !important;
+    background: white !important;
+    border: 1px solid #e1e5e9 !important;
+    border-radius: 6px !important;
+    overflow: hidden !important;
+}
+
+.auto-signature-preview img {
+    max-width: 100% !important;
+    max-height: 110px !important;
+    border-radius: 4px !important;
+    background: white !important;
+    object-fit: contain !important;
+}
+
+/* =========================================== */
+/* EFECTO VISUAL PARA NUEVAS FIRMAS */
+/* =========================================== */
+
+.document-signature.highlight-new {
+    animation: signatureHighlight 1s ease;
+    border: 3px solid #599d5e !important;
+    box-shadow: 0 0 20px rgba(89, 157, 94, 0.7) !important;
+}
+
+@keyframes signatureHighlight {
+    0% {
+        transform: scale(0.95);
+        opacity: 0.7;
+    }
+    50% {
+        transform: scale(1.05);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* =========================================== */
+/* MEJORAS PARA LA POSICIÓN DE FIRMA */
+/* =========================================== */
+
+@media (max-width: 768px) {
+    .document-signature {
+        min-width: 140px !important;
+        min-height: 70px !important;
+    }
+}

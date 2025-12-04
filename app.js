@@ -1774,6 +1774,307 @@ class DocumentService {
     static isTouchDevice = 'ontouchstart' in window;
 
     // ===========================================
+    // NUEVO MÉTODO PARA BUSCAR POSICIÓN DE FIRMA AUTOMÁTICAMENTE
+    // ===========================================
+    static async findSignaturePosition() {
+        return new Promise(async (resolve, reject) => {
+            try {
+                if (!this.currentDocument) {
+                    resolve({ x: 100, y: 100 }); // Posición por defecto
+                    return;
+                }
+                
+                const canvas = document.getElementById('documentCanvas');
+                if (!canvas) {
+                    resolve({ x: 100, y: 100 });
+                    return;
+                }
+                
+                const width = canvas.width;
+                const height = canvas.height;
+                
+                // Inteligencia para buscar espacios de firma
+                let position = await this.analyzeDocumentForSignatureSpace(canvas);
+                
+                // Si no se encontró un buen espacio, usar posiciones comunes
+                if (!position || position.x < 0 || position.y < 0) {
+                    position = this.getCommonSignaturePositions(width, height);
+                }
+                
+                // Asegurar que esté dentro del canvas
+                position.x = Math.max(50, Math.min(position.x, width - 250));
+                position.y = Math.max(50, Math.min(position.y, height - 100));
+                
+                console.log('Posición de firma encontrada:', position);
+                resolve(position);
+                
+            } catch (error) {
+                console.error('Error finding signature position:', error);
+                resolve({ x: 100, y: 100 }); // Posición por defecto en caso de error
+            }
+        });
+    }
+
+    // ===========================================
+    // NUEVA FUNCIÓN: Analizar documento para encontrar espacio de firma
+    // ===========================================
+
+    static async analyzeDocumentForSignatureSpace(canvas) {
+        return new Promise((resolve) => {
+            try {
+                const ctx = canvas.getContext('2d');
+                const width = canvas.width;
+                const height = canvas.height;
+                
+                // Estrategia 1: Buscar en el tercio inferior del documento (área común de firma)
+                const bottomThirdStartY = height * 0.66; // Comenzar a 2/3 del documento
+                const searchArea = {
+                    x: 0,
+                    y: bottomThirdStartY,
+                    width: width,
+                    height: height - bottomThirdStartY
+                };
+                
+                // Estrategia 2: Analizar el contenido para buscar líneas de firma
+                // Tomar muestras de píxeles en el área de búsqueda
+                const samplePoints = [];
+                const sampleStep = 20; // Tomar muestras cada 20 píxeles
+                
+                for (let x = searchArea.x; x < searchArea.x + searchArea.width; x += sampleStep) {
+                    for (let y = searchArea.y; y < searchArea.y + searchArea.height; y += sampleStep) {
+                        samplePoints.push({ x, y });
+                    }
+                }
+                
+                // Buscar áreas con menos densidad de tinta (más claras)
+                let bestPosition = null;
+                let bestScore = -Infinity;
+                
+                // Dividir el área de búsqueda en una cuadrícula
+                const gridSize = 10;
+                const cellWidth = searchArea.width / gridSize;
+                const cellHeight = searchArea.height / gridSize;
+                
+                for (let gridX = 0; gridX < gridSize; gridX++) {
+                    for (let gridY = 0; gridY < gridSize; gridY++) {
+                        const cellX = searchArea.x + (gridX * cellWidth);
+                        const cellY = searchArea.y + (gridY * cellHeight);
+                        
+                        // Muestrear la celda
+                        const samples = this.sampleCell(ctx, cellX, cellY, cellWidth, cellHeight);
+                        
+                        // Calcular puntuación basada en:
+                        // 1. Brillo promedio (más claro es mejor)
+                        // 2. Distancia a otras firmas existentes
+                        // 3. Proximidad al borde derecho (las firmas suelen estar a la derecha)
+                        
+                        const brightnessScore = this.calculateBrightnessScore(samples);
+                        const distanceScore = this.calculateDistanceScore(cellX, cellY);
+                        const positionScore = this.calculatePositionScore(cellX, cellY, width, height);
+                        
+                        const totalScore = brightnessScore * 0.5 + distanceScore * 0.3 + positionScore * 0.2;
+                        
+                        if (totalScore > bestScore) {
+                            bestScore = totalScore;
+                            bestPosition = {
+                                x: cellX + (cellWidth / 2),
+                                y: cellY + (cellHeight / 2)
+                            };
+                        }
+                    }
+                }
+                
+                // Si encontramos una buena posición, usarla
+                if (bestPosition && bestScore > 0.5) {
+                    console.log('Espacio de firma encontrado con puntuación:', bestScore);
+                    resolve(bestPosition);
+                    return;
+                }
+                
+                // Estrategia 3: Buscar líneas horizontales (líneas de firma)
+                const linePositions = this.findSignatureLines(ctx, searchArea);
+                if (linePositions.length > 0) {
+                    // Usar la primera línea encontrada, ajustando la posición
+                    const line = linePositions[0];
+                    resolve({
+                        x: line.x + (line.width / 2),
+                        y: line.y + 30 // Colocar firma encima de la línea
+                    });
+                    return;
+                }
+                
+                // Estrategia 4: Buscar áreas de texto que digan "firma" o similar
+                // Nota: Esta sería una característica avanzada que requeriría OCR
+                
+                // Si ninguna estrategia funcionó, devolver posición no válida
+                resolve({ x: -1, y: -1 });
+                
+            } catch (error) {
+                console.error('Error analyzing document:', error);
+                resolve({ x: -1, y: -1 });
+            }
+        });
+    }
+
+    // ===========================================
+    // FUNCIONES AUXILIARES PARA ANÁLISIS DE DOCUMENTO
+    // ===========================================
+
+    static sampleCell(ctx, x, y, width, height) {
+        const samples = [];
+        const sampleCount = 5;
+        
+        for (let i = 0; i < sampleCount; i++) {
+            const sampleX = x + Math.random() * width;
+            const sampleY = y + Math.random() * height;
+            
+            // Obtener datos de píxel
+            const imageData = ctx.getImageData(sampleX, sampleY, 1, 1).data;
+            samples.push({
+                r: imageData[0],
+                g: imageData[1],
+                b: imageData[2],
+                a: imageData[3]
+            });
+        }
+        
+        return samples;
+    }
+
+    static calculateBrightnessScore(samples) {
+        // Calcular el brillo promedio (0-255, donde 255 es blanco)
+        let totalBrightness = 0;
+        
+        samples.forEach(sample => {
+            // Fórmula de luminosidad perceptual
+            const brightness = 0.299 * sample.r + 0.587 * sample.g + 0.114 * sample.b;
+            totalBrightness += brightness;
+        });
+        
+        const avgBrightness = totalBrightness / samples.length;
+        
+        // Normalizar a 0-1 (más brillante = mejor)
+        return avgBrightness / 255;
+    }
+
+    static calculateDistanceScore(x, y) {
+        // Calcular distancia a firmas existentes
+        if (this.documentSignatures.length === 0) {
+            return 1; // Máxima puntuación si no hay firmas
+        }
+        
+        let minDistance = Infinity;
+        
+        this.documentSignatures.forEach(signature => {
+            const distance = Math.sqrt(
+                Math.pow(x - (signature.x + signature.width/2), 2) + 
+                Math.pow(y - (signature.y + signature.height/2), 2)
+            );
+            
+            if (distance < minDistance) {
+                minDistance = distance;
+            }
+        });
+        
+        // Normalizar: más distancia = mejor (no superponer)
+        // Considerar buena distancia si está a más de 200 píxeles
+        const goodDistance = 200;
+        return Math.min(minDistance / goodDistance, 1);
+    }
+
+    static calculatePositionScore(x, y, width, height) {
+        // Preferir esquina inferior derecha para firmas
+        const rightBias = 1 - (x / width); // Más cerca de la derecha = mejor
+        const bottomBias = 1 - (y / height); // Más cerca del fondo = mejor
+        
+        return (rightBias * 0.7 + bottomBias * 0.3);
+    }
+
+    static getCommonSignaturePositions(width, height) {
+        // Posiciones comunes donde se colocan las firmas
+        const positions = [
+            { x: width * 0.75, y: height * 0.85 }, // Esquina inferior derecha
+            { x: width * 0.7, y: height * 0.8 },   // Centro-derecha inferior
+            { x: width * 0.1, y: height * 0.85 },  // Esquina inferior izquierda
+            { x: width * 0.5, y: height * 0.9 },   // Centro inferior
+            { x: width * 0.3, y: height * 0.85 }   // Centro-izquierda inferior
+        ];
+        
+        // Filtrar posiciones ocupadas por otras firmas
+        const availablePositions = positions.filter(position => {
+            for (const sig of this.documentSignatures) {
+                const distance = Math.sqrt(
+                    Math.pow(position.x - (sig.x + sig.width/2), 2) + 
+                    Math.pow(position.y - (sig.y + sig.height/2), 2)
+                );
+                
+                if (distance < 150) { // Si hay una firma muy cerca
+                    return false;
+                }
+            }
+            return true;
+        });
+        
+        // Si hay posiciones disponibles, usar la primera
+        if (availablePositions.length > 0) {
+            return availablePositions[0];
+        }
+        
+        // Si todas están ocupadas, crear nueva posición al lado de la última firma
+        if (this.documentSignatures.length > 0) {
+            const lastSig = this.documentSignatures[this.documentSignatures.length - 1];
+            return {
+                x: lastSig.x + lastSig.width + 20,
+                y: lastSig.y
+            };
+        }
+        
+        // Si no hay firmas, usar la primera posición
+        return positions[0];
+    }
+
+    static findSignatureLines(ctx, searchArea) {
+        // Buscar líneas horizontales (posibles líneas de firma)
+        const lines = [];
+        const scanStep = 5; // Escanear cada 5 píxeles
+        
+        for (let y = searchArea.y; y < searchArea.y + searchArea.height; y += scanStep) {
+            let lineStart = null;
+            let lineLength = 0;
+            
+            for (let x = searchArea.x; x < searchArea.x + searchArea.width; x++) {
+                const imageData = ctx.getImageData(x, y, 1, 1).data;
+                const brightness = 0.299 * imageData[0] + 0.587 * imageData[1] + 0.114 * imageData[2];
+                
+                // Detectar píxeles oscuros (líneas)
+                if (brightness < 100) {
+                    if (lineStart === null) {
+                        lineStart = x;
+                    }
+                    lineLength++;
+                } else {
+                    if (lineStart !== null && lineLength > 50) { // Línea de al menos 50 píxeles
+                        lines.push({
+                            x: lineStart,
+                            y: y,
+                            width: lineLength,
+                            height: 1
+                        });
+                    }
+                    lineStart = null;
+                    lineLength = 0;
+                }
+            }
+        }
+        
+        // Filtrar líneas que probablemente sean de firma (más largas y en el tercio inferior)
+        return lines.filter(line => 
+            line.width > 100 && // Al menos 100 píxeles de largo
+            line.y > searchArea.y + (searchArea.height * 0.5) // En la mitad inferior del área de búsqueda
+        );
+    }
+
+    // ===========================================
     // NUEVO: MÉTODO MEJORADO PARA INTERACTIVIDAD DE FIRMAS
     // ===========================================
     static makeSignatureInteractive(element, signatureData) {
@@ -2650,25 +2951,12 @@ class DocumentService {
         return signatureElement;
     }
 
+    // ===========================================
+    // REEMPLAZAR: enableSignatureMode
+    // ===========================================
     static enableSignatureMode() {
-        this.isSignatureMode = true;
-        document.body.classList.add('signature-mode-active');
-        
-        const canvas = document.getElementById('documentCanvas');
-        const signatureLayer = document.getElementById('signatureLayer');
-        
-        if (canvas) canvas.style.cursor = 'crosshair';
-        if (signatureLayer) signatureLayer.style.pointerEvents = 'none';
-        
-        this.canvasClickHandler = this.handleCanvasClick.bind(this);
-        if (canvas) canvas.addEventListener('click', this.canvasClickHandler);
-        
-        showNotification('Modo firma activado - Haz clic en el documento para colocar tu firma');
-    }
-
-    static disableSignatureMode() {
-        this.isSignatureMode = false;
-        document.body.classList.remove('signature-mode-active');
+        this.isSignatureMode = false; // Ya no necesitamos modo de clic
+        document.body.classList.remove('signature-mode-active'); // Quitar clase CSS
         
         const canvas = document.getElementById('documentCanvas');
         const signatureLayer = document.getElementById('signatureLayer');
@@ -2676,12 +2964,14 @@ class DocumentService {
         if (canvas) canvas.style.cursor = 'default';
         if (signatureLayer) signatureLayer.style.pointerEvents = 'auto';
         
-        if (this.canvasClickHandler && canvas) {
-            canvas.removeEventListener('click', this.canvasClickHandler);
-            this.canvasClickHandler = null;
-        }
+        // NO agregar event listener de clic
+        this.canvasClickHandler = null;
+        
+        // Ahora colocamos la firma automáticamente
+        this.addSignatureToDocument();
     }
 
+    /*
     static handleCanvasClick(e) {
         if (!this.isSignatureMode || !this.currentSignature) {
             return;
@@ -2701,14 +2991,45 @@ class DocumentService {
         this.addSignatureToDocument(x, y);
         this.disableSignatureMode();
     }
+    */
 
-    static async addSignatureToDocument(x, y) {
+    // ===========================================
+    // REEMPLAZAR: disableSignatureMode
+    // ===========================================
+    static disableSignatureMode() {
+        this.isSignatureMode = false;
+        document.body.classList.remove('signature-mode-active');
+        
+        const canvas = document.getElementById('documentCanvas');
+        const signatureLayer = document.getElementById('signatureLayer');
+        
+        if (canvas) canvas.style.cursor = 'default';
+        if (signatureLayer) signatureLayer.style.pointerEvents = 'auto';
+        
+        // Ya no hay event listener que remover
+        this.canvasClickHandler = null;
+    }
+
+    // ===========================================
+    // REEMPLAZAR: addSignatureToDocument
+    // ===========================================
+    static async addSignatureToDocument() {
         if (!this.currentSignature) {
             showNotification('No hay firma seleccionada', 'error');
             return;
         }
 
+        if (!this.currentDocument) {
+            showNotification('Primero selecciona un documento', 'error');
+            return;
+        }
+
         try {
+            // Buscar posición automáticamente con análisis inteligente
+            const position = await this.findSignaturePosition();
+            
+            console.log('Colocando firma en posición:', position);
+            
             let width, height;
             const canvas = document.getElementById('documentCanvas');
             
@@ -2721,45 +3042,53 @@ class DocumentService {
                     img.onerror = reject;
                 });
                 
-                const maxWidth = 280;
-                const maxHeight = 140;
+                const maxWidth = 300; // Aumentado ligeramente
+                const maxHeight = 150; // Aumentado ligeramente
                 
                 width = img.naturalWidth;
                 height = img.naturalHeight;
                 
+                // Mantener proporción
                 if (width > maxWidth || height > maxHeight) {
                     const ratio = Math.min(maxWidth / width, maxHeight / height);
                     width = width * ratio;
                     height = height * ratio;
                 }
             } else {
-                width = 250;
-                height = 90;
+                // Para firma automática, tamaño estándar
+                width = 280; // Aumentado de 250 a 280
+                height = 100; // Aumentado de 90 a 100
             }
 
             const signature = {
-                id: 'sig_' + Date.now(),
+                id: 'sig_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
                 data: this.currentSignature.data,
                 userName: AppState.currentUser.name,
                 userEmail: AppState.currentUser.email,
-                x: x - (width / 2),
-                y: y - (height / 2),
+                x: position.x,
+                y: position.y,
                 width: width,
                 height: height,
                 timestamp: new Date(),
-                type: this.currentSignature.type
+                type: this.currentSignature.type,
+                addedBy: 'auto_placement' // Para tracking
             };
             
-            signature.x = Math.max(0, signature.x);
-            signature.y = Math.max(0, signature.y);
-            
+            // Ajustar posición para que no salga del canvas
             if (canvas) {
+                const canvasRect = canvas.getBoundingClientRect();
+                
+                // Asegurar que la firma quepa en el canvas
                 if (signature.x + signature.width > canvas.width) {
-                    signature.x = canvas.width - signature.width;
+                    signature.x = canvas.width - signature.width - 20;
                 }
                 if (signature.y + signature.height > canvas.height) {
-                    signature.y = canvas.height - signature.height;
+                    signature.y = canvas.height - signature.height - 20;
                 }
+                
+                // Asegurar posición mínima
+                signature.x = Math.max(20, signature.x);
+                signature.y = Math.max(20, signature.y);
             }
             
             this.documentSignatures.push(signature);
@@ -2769,17 +3098,32 @@ class DocumentService {
             this.renderExistingSignatures();
             this.renderSignaturesList();
             
-            showNotification('Firma agregada al documento');
+            // Mostrar feedback visual
+            const signatureElement = document.querySelector(`[data-signature-id="${signature.id}"]`);
+            if (signatureElement) {
+                signatureElement.classList.add('highlight-new');
+                setTimeout(() => {
+                    signatureElement.classList.remove('highlight-new');
+                }, 1000);
+            }
+            
+            showNotification('Firma agregada automáticamente al documento');
             
         } catch (error) {
             console.error('Error al agregar firma:', error);
-            showNotification('Error al agregar la firma', 'error');
+            showNotification('Error al agregar la firma: ' + error.message, 'error');
         }
     }
 
+    // ===========================================
+    // REEMPLAZAR: setCurrentSignature
+    // ===========================================
     static setCurrentSignature(signatureData) {
         this.currentSignature = signatureData;
+        // Ya no activamos modo firma, llamamos directamente a enableSignatureMode
+        // que ahora agregará automáticamente la firma
         this.enableSignatureMode();
+        showNotification('Firma seleccionada - Se colocará automáticamente');
     }
 
     static clearAllSignatures() {
@@ -2888,6 +3232,9 @@ class DocumentService {
         this.renderDocumentSelector();
     }
 
+    // ===========================================
+    // REEMPLAZAR: initializeDocumentInteractions
+    // ===========================================
     static initializeDocumentInteractions() {
         const container = document.getElementById('documentContainer');
         const canvas = document.getElementById('documentCanvas');
@@ -2898,6 +3245,9 @@ class DocumentService {
             });
             
             container.style.touchAction = 'manipulation';
+            
+            // Eliminar cualquier event listener de clic anterior
+            canvas.removeEventListener('click', DocumentService.handleCanvasClick);
         }
     }
 
@@ -3649,6 +3999,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
+    // ===========================================
+    // MODIFICAR: Evento para useAutoSignatureBtn
+    // ===========================================
     const useAutoSignatureBtn = document.getElementById('useAutoSignature');
     if (useAutoSignatureBtn) {
         useAutoSignatureBtn.addEventListener('click', function() {
@@ -3740,6 +4093,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // ===========================================
+    // MODIFICAR: Evento para saveUploadSignatureBtn
+    // ===========================================
     if (saveUploadSignatureBtn) {
         saveUploadSignatureBtn.addEventListener('click', function() {
             if (!AppState.currentSignature) {
@@ -3838,6 +4194,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
+    // ===========================================
+    // MODIFICAR: Evento para addSignatureBtn
+    // ===========================================
     const addSignatureBtn = document.getElementById('addSignatureBtn');
     if (addSignatureBtn) {
         addSignatureBtn.addEventListener('click', function() {
@@ -3851,6 +4210,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
             
+            // Agregar firma automáticamente usando la firma actual
             DocumentService.setCurrentSignature(AppState.currentSignature);
         });
     }
