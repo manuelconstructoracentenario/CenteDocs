@@ -3336,7 +3336,7 @@ class DocumentService {
     }
 
     // ===========================================
-    // REEMPLAZAR: findSmartSignaturePosition con DETECCIÓN MEJORADA
+    // FUNCIÓN MEJORADA: Buscar posición inteligente para firma
     // ===========================================
     static async findSmartSignaturePosition() {
         return new Promise(async (resolve, reject) => {
@@ -3356,77 +3356,532 @@ class DocumentService {
                 const width = canvas.width;
                 const height = canvas.height;
                 
-                console.log('🔍 Iniciando búsqueda inteligente de espacio para firma...');
+                console.log('🔍 Buscando espacios de firma en documento...');
                 
-                // ESTRATEGIA 1: Buscar áreas de texto con palabras como "firma"
-                const signatureWordAreas = await this.findSignatureWordAreas(ctx, width, height);
-                if (signatureWordAreas.length > 0) {
-                    console.log(`✅ Encontradas ${signatureWordAreas.length} áreas con texto de firma`);
+                // 1. BUSCAR TEXTO QUE INDICA CAMPOS DE FIRMA (versión mejorada)
+                const signatureFields = await this.findSignatureFields(ctx, width, height);
+                if (signatureFields.length > 0) {
+                    console.log(`✅ Encontrados ${signatureFields.length} campos de firma`);
                     
-                    // Para cada área encontrada, buscar espacio vacío alrededor
-                    for (const area of signatureWordAreas) {
-                        const emptySpace = this.findEmptySpaceNearArea(ctx, area, width, height);
-                        if (emptySpace.found) {
-                            console.log('✅ Encontrado espacio vacío cerca de texto "firma"');
-                            resolve({ x: emptySpace.x, y: emptySpace.y });
+                    // Ordenar por posición Y (de arriba a abajo)
+                    signatureFields.sort((a, b) => a.y - b.y);
+                    
+                    // Buscar espacio para firmar debajo de cada campo
+                    for (const field of signatureFields) {
+                        const signaturePosition = this.findSignaturePositionForField(ctx, field, width, height);
+                        if (signaturePosition.found) {
+                            console.log(`✅ Espacio encontrado para: ${field.text}`);
+                            resolve({
+                                x: signaturePosition.x,
+                                y: signaturePosition.y,
+                                field: field.text
+                            });
                             return;
                         }
                     }
                 }
                 
-                // ESTRATEGIA 2: Buscar líneas cortas horizontales (líneas de firma)
-                const signatureLines = this.findSignatureLines(ctx, width, height);
+                // 2. BUSCAR LÍNEAS HORIZONTALES (líneas de firma)
+                const signatureLines = this.findHorizontalSignatureLines(ctx, width, height);
                 if (signatureLines.length > 0) {
                     console.log(`✅ Encontradas ${signatureLines.length} líneas de firma`);
                     
-                    // Ordenar líneas por posición Y (de abajo hacia arriba)
-                    signatureLines.sort((a, b) => b.y - a.y);
+                    // Ordenar líneas por posición Y (de arriba a abajo)
+                    signatureLines.sort((a, b) => a.y - b.y);
                     
-                    // Probar cada línea para encontrar espacio encima
+                    // Usar la primera línea que tenga espacio arriba
                     for (const line of signatureLines) {
                         const spaceAbove = this.findSpaceAboveLine(ctx, line, width, height);
                         if (spaceAbove.found) {
-                            console.log('✅ Encontrado espacio encima de línea de firma');
+                            console.log('✅ Usando línea de firma encontrada');
                             resolve({ x: spaceAbove.x, y: spaceAbove.y });
                             return;
                         }
                     }
                 }
                 
-                // ESTRATEGIA 3: Buscar recuadros vacíos (espacios designados para firma)
-                const signatureBoxes = this.findSignatureBoxes(ctx, width, height);
-                if (signatureBoxes.length > 0) {
-                    console.log(`✅ Encontrados ${signatureBoxes.length} recuadros de firma`);
-                    
-                    // Usar el primer recuadro encontrado
-                    const box = signatureBoxes[0];
-                    console.log('✅ Usando recuadro de firma encontrado');
-                    resolve({ 
-                        x: box.x + 10, // Margen interno
-                        y: box.y + 10   // Margen interno
-                    });
-                    return;
-                }
-                
-                // ESTRATEGIA 4: Buscar en las zonas comunes
-                const commonZone = this.findBestCommonZone(ctx, width, height);
+                // 3. BUSCAR EN ZONAS COMUNES DE FIRMAS (mejorado)
+                const commonZone = this.findBestCommonZoneImproved(ctx, width, height);
                 if (commonZone.found) {
                     console.log('✅ Encontrada zona común para firma');
                     resolve({ x: commonZone.x, y: commonZone.y });
                     return;
                 }
                 
-                // ESTRATEGIA 5: Posición inteligente por defecto
-                console.log('📍 Usando posición inteligente por defecto');
-                const defaultPos = this.getIntelligentDefaultPosition(width, height);
+                // 4. POSICIÓN PREDETERMINADA INTELIGENTE
+                console.log('📍 Usando posición predeterminada mejorada');
+                const defaultPos = this.getImprovedDefaultPosition(width, height);
                 resolve(defaultPos);
                 
             } catch (error) {
-                console.error('Error en findSmartSignaturePosition:', error);
-                // Posición de respaldo
+                console.error('Error en findSmartSignaturePosition mejorada:', error);
                 resolve({ x: width * 0.7 - 90, y: height * 0.8 - 35 });
             }
         });
+    }
+
+    // ===========================================
+    // NUEVA FUNCIÓN: Buscar campos de firma por texto
+    // ===========================================
+    static async findSignatureFields(ctx, width, height) {
+        const fields = [];
+        
+        try {
+            // Lista de palabras que indican campos de firma (en español)
+            const signatureKeywords = [
+                'firma', 'firmado', 'firmante', 'firmar',
+                'nombre', 'nombre:', 'nombre :',
+                'aprobado', 'aprobado:', 'aprobado :',
+                'recibido', 'recibido:', 'recibido :',
+                'elaborado', 'elaborado:', 'elaborado :',
+                'revisado', 'revisado:', 'revisado :',
+                'autorizado', 'autorizado:', 'autorizado :',
+                'entrego', 'entrego:', 'entrego :',
+                'recibió', 'recibió:', 'recibió :',
+                'inspecciono', 'inspecciono:', 'inspecciono :',
+                'fecha', 'fecha:', 'fecha :',
+                'date', 'date:', 'date :',
+                'signature', 'signed', 'sign',
+                'aprobador', 'revisor', 'elaborador'
+            ];
+            
+            // Áreas donde buscar (normalmente al final del documento)
+            const searchAreas = [
+                { x: 0, y: height * 0.7, w: width, h: height * 0.3, label: 'inferior' }, // Zona inferior 30%
+                { x: width * 0.6, y: height * 0.1, w: width * 0.4, h: height * 0.2, label: 'superior_derecha' }, // Esquina superior derecha
+                { x: width * 0.1, y: height * 0.8, w: width * 0.8, h: height * 0.15, label: 'centro_inferior' } // Centro inferior
+            ];
+            
+            for (const area of searchAreas) {
+                // Escanear el área en busca de texto
+                const textRegions = this.scanForTextRegions(ctx, area.x, area.y, area.w, area.h);
+                
+                for (const region of textRegions) {
+                    // Verificar si esta región contiene palabras clave de firma
+                    if (this.containsSignatureKeywords(ctx, region, signatureKeywords)) {
+                        fields.push({
+                            x: region.x,
+                            y: region.y,
+                            width: region.width,
+                            height: region.height,
+                            text: region.suspectedText || 'campo de firma',
+                            area: area.label
+                        });
+                    }
+                }
+            }
+            
+        } catch (error) {
+            console.error('Error en findSignatureFields:', error);
+        }
+        
+        return fields;
+    }
+
+    // ===========================================
+    // NUEVA FUNCIÓN: Escanear regiones de texto
+    // ===========================================
+    static scanForTextRegions(ctx, startX, startY, width, height) {
+        const regions = [];
+        const gridSize = 15; // Cuadrícula más fina para mejor detección
+        const cellWidth = Math.floor(width / gridSize);
+        const cellHeight = Math.floor(height / gridSize);
+        
+        for (let gy = 0; gy < gridSize; gy++) {
+            for (let gx = 0; gx < gridSize; gx++) {
+                const cellX = startX + (gx * cellWidth);
+                const cellY = startY + (gy * cellHeight);
+                
+                // Calcular densidad de píxeles oscuros (texto)
+                const textDensity = this.calculateTextDensity(ctx, cellX, cellY, cellWidth, cellHeight);
+                
+                if (textDensity > 0.2) { // Región con bastante texto
+                    regions.push({
+                        x: cellX,
+                        y: cellY,
+                        width: cellWidth,
+                        height: cellHeight,
+                        density: textDensity,
+                        centerX: cellX + cellWidth/2,
+                        centerY: cellY + cellHeight/2
+                    });
+                }
+            }
+        }
+        
+        // Agrupar regiones cercanas
+        return this.groupNearbyRegions(regions);
+    }
+
+    // ===========================================
+    // NUEVA FUNCIÓN: Verificar si región contiene palabras clave
+    // ===========================================
+    static containsSignatureKeywords(ctx, region, keywords) {
+        // Para simplificar, verificamos características de regiones de firma:
+        // 1. Suelen ser rectangulares
+        // 2. Tienen espacio debajo (para firmar)
+        // 3. Suelen estar alineadas a la izquierda o derecha
+        
+        const spaceBelow = this.checkSpaceBelow(ctx, region.x, region.y + region.height, region.width, 40);
+        const spaceRight = this.checkSpaceRight(ctx, region.x + region.width, region.y, 80, region.height);
+        
+        // Las regiones de firma suelen tener espacio debajo (para la firma) o a la derecha
+        return (spaceBelow || spaceRight);
+    }
+
+    // ===========================================
+    // NUEVA FUNCIÓN: Encontrar posición para firma basada en campo
+    // ===========================================
+    static findSignaturePositionForField(ctx, field, width, height) {
+        // Estrategias para colocar firma basada en el campo encontrado
+        
+        // 1. Buscar línea horizontal debajo del campo
+        const lineBelow = this.findLineBelow(ctx, field.x, field.y + field.height, field.width, 50);
+        if (lineBelow.found) {
+            return {
+                found: true,
+                x: lineBelow.x + (lineBelow.length/2) - 60, // Centrar sobre la línea
+                y: lineBelow.y - 40 // Colocar justo encima de la línea
+            };
+        }
+        
+        // 2. Buscar espacio vacío debajo del campo
+        const spaceBelow = this.findEmptySpaceBelow(ctx, field.x, field.y + field.height, field.width, 60);
+        if (spaceBelow.found) {
+            return {
+                found: true,
+                x: spaceBelow.x + (field.width/2) - 60,
+                y: spaceBelow.y + 10
+            };
+        }
+        
+        // 3. Buscar a la derecha del campo (para campos como "Nombre:")
+        const spaceRight = this.findEmptySpaceRight(ctx, field.x + field.width, field.y, 150, field.height);
+        if (spaceRight.found) {
+            return {
+                found: true,
+                x: spaceRight.x + 10,
+                y: spaceRight.y + (field.height/2) - 30
+            };
+        }
+        
+        return { found: false, x: 0, y: 0 };
+    }
+
+    // ===========================================
+    // NUEVA FUNCIÓN: Buscar línea debajo de posición
+    // ===========================================
+    static findLineBelow(ctx, startX, startY, width, searchHeight) {
+        try {
+            for (let y = startY; y < startY + searchHeight; y += 2) {
+                let lineLength = 0;
+                let lineStartX = startX;
+                
+                for (let x = startX; x < startX + width; x++) {
+                    const pixel = ctx.getImageData(x, y, 1, 1).data;
+                    const brightness = (pixel[0] + pixel[1] + pixel[2]) / 3;
+                    
+                    if (brightness < 100) { // Píxel oscuro
+                        if (lineLength === 0) {
+                            lineStartX = x;
+                        }
+                        lineLength++;
+                    } else {
+                        if (lineLength > 60 && lineLength < 200) { // Línea de longitud razonable
+                            return {
+                                found: true,
+                                x: lineStartX,
+                                y: y,
+                                length: lineLength
+                            };
+                        }
+                        lineLength = 0;
+                    }
+                }
+                
+                // Verificar línea al final del escaneo
+                if (lineLength > 60 && lineLength < 200) {
+                    return {
+                        found: true,
+                        x: lineStartX,
+                        y: y,
+                        length: lineLength
+                    };
+                }
+            }
+        } catch (error) {
+            console.error('Error en findLineBelow:', error);
+        }
+        
+        return { found: false, x: 0, y: 0, length: 0 };
+    }
+
+    // ===========================================
+    // NUEVA FUNCIÓN: Buscar espacio vacío debajo
+    // ===========================================
+    static findEmptySpaceBelow(ctx, startX, startY, width, searchHeight) {
+        const spaceNeeded = 70; // Altura necesaria para la firma
+        
+        for (let y = startY; y < startY + searchHeight - spaceNeeded; y += 5) {
+            for (let x = startX; x < startX + width; x += 5) {
+                // Verificar área de 80x70 píxeles
+                const isEmpty = this.checkAreaEmpty(ctx, x, y, 80, spaceNeeded);
+                if (isEmpty) {
+                    return {
+                        found: true,
+                        x: x,
+                        y: y
+                    };
+                }
+            }
+        }
+        
+        return { found: false, x: 0, y: 0 };
+    }
+
+    // ===========================================
+    // NUEVA FUNCIÓN: Buscar espacio vacío a la derecha
+    // ===========================================
+    static findEmptySpaceRight(ctx, startX, startY, searchWidth, height) {
+        const spaceNeeded = 80; // Ancho necesario para la firma
+        
+        for (let x = startX; x < startX + searchWidth - spaceNeeded; x += 5) {
+            for (let y = startY; y < startY + height; y += 5) {
+                // Verificar área de 80x60 píxeles
+                const isEmpty = this.checkAreaEmpty(ctx, x, y, spaceNeeded, 60);
+                if (isEmpty) {
+                    return {
+                        found: true,
+                        x: x,
+                        y: y
+                    };
+                }
+            }
+        }
+        
+        return { found: false, x: 0, y: 0 };
+    }
+
+    // ===========================================
+    // NUEVA FUNCIÓN: Buscar líneas horizontales de firma
+    // ===========================================
+    static findHorizontalSignatureLines(ctx, width, height) {
+        const lines = [];
+        
+        // Buscar en el cuarto inferior del documento
+        const startY = height * 0.75;
+        const endY = height * 0.95;
+        
+        for (let y = startY; y < endY; y += 3) {
+            let lineLength = 0;
+            let lineStartX = 0;
+            let maxLineLength = 0;
+            let maxLineStartX = 0;
+            
+            for (let x = 0; x < width; x++) {
+                const pixel = ctx.getImageData(x, y, 1, 1).data;
+                const brightness = (pixel[0] + pixel[1] + pixel[2]) / 3;
+                
+                if (brightness < 120) { // Píxel oscuro
+                    if (lineLength === 0) {
+                        lineStartX = x;
+                    }
+                    lineLength++;
+                } else {
+                    if (lineLength > maxLineLength) {
+                        maxLineLength = lineLength;
+                        maxLineStartX = lineStartX;
+                    }
+                    lineLength = 0;
+                }
+            }
+            
+            // Verificar línea al final
+            if (lineLength > maxLineLength) {
+                maxLineLength = lineLength;
+                maxLineStartX = lineStartX;
+            }
+            
+            // Líneas de firma típicas: 80-200 píxeles
+            if (maxLineLength >= 80 && maxLineLength <= 250) {
+                // Verificar que no sea borde de página
+                const margin = width * 0.05;
+                const isBorder = maxLineStartX < margin || (maxLineStartX + maxLineLength) > (width - margin);
+                
+                if (!isBorder) {
+                    lines.push({
+                        x: maxLineStartX,
+                        y: y,
+                        length: maxLineLength,
+                        endX: maxLineStartX + maxLineLength
+                    });
+                }
+            }
+        }
+        
+        return lines;
+    }
+
+    // ===========================================
+    // NUEVA FUNCIÓN: Zona común mejorada
+    // ===========================================
+    static findBestCommonZoneImproved(ctx, width, height) {
+        // Posiciones comunes basadas en los documentos proporcionados
+        const commonPositions = [
+            // Para documentos como CC 30665 (campos alineados a la izquierda)
+            { x: width * 0.15, y: height * 0.85, label: 'inferior_izquierda', priority: 1 },
+            
+            // Para documentos como el acta de devolución (firmas al final)
+            { x: width * 0.1, y: height * 0.88, label: 'final_izquierda', priority: 2 },
+            
+            // Para facturas (firma a la derecha)
+            { x: width * 0.65, y: height * 0.85, label: 'inferior_derecha', priority: 3 },
+            
+            // Centrada inferior (último recurso)
+            { x: width * 0.4, y: height * 0.9, label: 'centro_inferior', priority: 4 }
+        ];
+        
+        // Ordenar por prioridad
+        commonPositions.sort((a, b) => a.priority - b.priority);
+        
+        for (const pos of commonPositions) {
+            const isEmpty = this.checkAreaEmpty(ctx, pos.x, pos.y, 180, 70);
+            if (isEmpty) {
+                return {
+                    found: true,
+                    x: pos.x,
+                    y: pos.y,
+                    label: pos.label
+                };
+            }
+        }
+        
+        return { found: false, x: 0, y: 0 };
+    }
+
+    // ===========================================
+    // NUEVA FUNCIÓN: Posición predeterminada mejorada
+    // ===========================================
+    static getImprovedDefaultPosition(width, height) {
+        // Basado en análisis de documentos proporcionados:
+        // - Los documentos tienen firmas principalmente en la parte inferior
+        // - Preferiblemente alineadas a la izquierda
+        
+        if (height > width * 1.5) { // Documento muy vertical
+            return { x: width * 0.15, y: height * 0.87 };
+        } else if (height > width) { // Documento vertical normal
+            return { x: width * 0.2, y: height * 0.85 };
+        } else { // Documento horizontal
+            return { x: width * 0.7, y: height * 0.8 };
+        }
+    }
+
+    // ===========================================
+    // FUNCIONES AUXILIARES MEJORADAS
+    // ===========================================
+
+    // Agrupar regiones cercanas
+    static groupNearbyRegions(regions) {
+        if (regions.length === 0) return [];
+        
+        const groups = [];
+        const visited = new Set();
+        
+        for (let i = 0; i < regions.length; i++) {
+            if (visited.has(i)) continue;
+            
+            const group = [regions[i]];
+            visited.add(i);
+            
+            for (let j = i + 1; j < regions.length; j++) {
+                if (visited.has(j)) continue;
+                
+                const r1 = regions[i];
+                const r2 = regions[j];
+                
+                // Calcular distancia entre centros
+                const distance = Math.sqrt(
+                    Math.pow(r1.centerX - r2.centerX, 2) + 
+                    Math.pow(r1.centerY - r2.centerY, 2)
+                );
+                
+                // Si están cerca (menos de 50 píxeles)
+                if (distance < 50) {
+                    group.push(regions[j]);
+                    visited.add(j);
+                }
+            }
+            
+            if (group.length > 0) {
+                // Calcular centro del grupo
+                const avgX = group.reduce((sum, r) => sum + r.centerX, 0) / group.length;
+                const avgY = group.reduce((sum, r) => sum + r.centerY, 0) / group.length;
+                const avgDensity = group.reduce((sum, r) => sum + r.density, 0) / group.length;
+                
+                groups.push({
+                    x: avgX - 25,
+                    y: avgY - 15,
+                    width: 50,
+                    height: 30,
+                    density: avgDensity,
+                    centerX: avgX,
+                    centerY: avgY
+                });
+            }
+        }
+        
+        return groups;
+    }
+
+    // Verificar espacio debajo
+    static checkSpaceBelow(ctx, x, y, width, height) {
+        try {
+            const checkArea = { x: x, y: y, width: width, height: height };
+            const isEmpty = this.checkAreaEmpty(ctx, checkArea.x, checkArea.y, checkArea.width, checkArea.height);
+            return isEmpty;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    // Verificar espacio a la derecha
+    static checkSpaceRight(ctx, x, y, width, height) {
+        try {
+            const checkArea = { x: x, y: y, width: width, height: height };
+            const isEmpty = this.checkAreaEmpty(ctx, checkArea.x, checkArea.y, checkArea.width, checkArea.height);
+            return isEmpty;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    // Calcular densidad de texto
+    static calculateTextDensity(ctx, x, y, width, height) {
+        try {
+            const sampleStep = 4;
+            let darkPixels = 0;
+            let totalPixels = 0;
+            
+            for (let sy = y; sy < y + height; sy += sampleStep) {
+                for (let sx = x; sx < x + width; sx += sampleStep) {
+                    try {
+                        const pixel = ctx.getImageData(sx, sy, 1, 1).data;
+                        const brightness = (pixel[0] + pixel[1] + pixel[2]) / 3;
+                        
+                        if (brightness < 160) { // Píxel oscuro (posible texto)
+                            darkPixels++;
+                        }
+                        totalPixels++;
+                    } catch (e) {
+                        // Ignorar píxeles fuera del canvas
+                    }
+                }
+            }
+            
+            return totalPixels > 0 ? darkPixels / totalPixels : 0;
+        } catch (error) {
+            return 0;
+        }
     }
 
     // ===========================================
