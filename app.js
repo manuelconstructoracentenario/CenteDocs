@@ -3774,7 +3774,7 @@ class DocumentService {
             } else {
                 // Para firma automática, tamaño compacto
                 width = 170;  // Compacto
-                height = 45;  // Compacto
+                height = 60;  // Compacto
             }
 
             const signature = {
@@ -4633,16 +4633,8 @@ function updateAutoSignaturePreview() {
     if (!autoPreview || !AppState.currentSignature || AppState.currentSignature.type !== 'auto') return;
     
     autoPreview.innerHTML = `
-        <div style="text-align: center; padding: 10px; background: white; border-radius: 4px; border: 1px solid #e1e5e9;">
-            <img src="${AppState.currentSignature.data}" alt="Firma automática" 
-                 style="max-width: 100%; max-height: 120px; background: transparent; border-radius: 4px;">
-            <div style="margin-top: 10px; font-size: 12px; color: #666;">
-                <div><strong>Formato mejorado:</strong></div>
-                <div>1. "Firmado digitalmente por:"</div>
-                <div>2. Nombre completo</div>
-                <div>3. Fecha y hora</div>
-            </div>
-        </div>
+        <img src="${AppState.currentSignature.data}" alt="Firma automática" 
+             style="max-width: 100%; max-height: 110px; background: transparent; border: 1px solid #e1e5e9; border-radius: 4px;">
     `;
 }
 
