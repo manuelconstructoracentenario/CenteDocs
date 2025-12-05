@@ -5202,3 +5202,125 @@
 .signature-panel {
     max-height: 380px !important; /* Reducido de 400px */
 }
+
+/* =========================================== */
+/* AJUSTES PARA FIRMAS MÁS PEQUEÑAS Y MEJOR VISUALIZACIÓN */
+/* =========================================== */
+
+.document-signature {
+    min-width: 70px !important;   /* Más pequeño */
+    min-height: 35px !important;  /* Más pequeño */
+    border: 2px dashed #2f6c46 !important;
+    background: rgba(47, 108, 70, 0.08) !important; /* Más transparente */
+}
+
+.document-signature.selected {
+    border: 2px solid #599d5e !important;
+    background: rgba(89, 157, 94, 0.15) !important;
+    box-shadow: 0 0 0 2px rgba(89, 157, 94, 0.3) !important;
+}
+
+/* Ajustar handles para firmas más pequeñas */
+.signature-handle {
+    width: 14px !important;  /* Más pequeño */
+    height: 14px !important; /* Más pequeño */
+    background: #599d5e !important;
+    border: 2px solid white !important;
+}
+
+.handle-top-left {
+    top: -7px !important;
+    left: -7px !important;
+}
+
+.handle-top-right {
+    top: -7px !important;
+    right: -7px !important;
+}
+
+.handle-bottom-left {
+    bottom: -7px !important;
+    left: -7px !important;
+}
+
+.handle-bottom-right {
+    bottom: -7px !important;
+    right: -7px !important;
+}
+
+/* Mejorar la imagen dentro de la firma */
+.document-signature img {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain !important;
+    padding: 3px !important; /* Pequeño padding interno */
+    box-sizing: border-box !important;
+}
+
+/* Animación de nueva firma mejorada */
+@keyframes signaturePlacement {
+    0% {
+        transform: scale(0.9);
+        opacity: 0.7;
+        box-shadow: 0 0 0 0 rgba(89, 157, 94, 0.7);
+    }
+    50% {
+        transform: scale(1.02);
+        opacity: 1;
+        box-shadow: 0 0 20px 10px rgba(89, 157, 94, 0.4);
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+        box-shadow: 0 0 0 0 rgba(89, 157, 94, 0);
+    }
+}
+
+.document-signature.highlight-new {
+    animation: signaturePlacement 1.5s ease !important;
+    z-index: 1000 !important;
+}
+
+/* Para móvil */
+@media (max-width: 768px) {
+    .document-signature {
+        min-width: 90px !important;   /* Ajustado para móvil */
+        min-height: 45px !important;  /* Ajustado para móvil */
+    }
+    
+    .signature-handle {
+        width: 18px !important;
+        height: 18px !important;
+    }
+    
+    .handle-top-left {
+        top: -9px !important;
+        left: -9px !important;
+    }
+    
+    .handle-top-right {
+        top: -9px !important;
+        right: -9px !important;
+    }
+    
+    .handle-bottom-left {
+        bottom: -9px !important;
+        left: -9px !important;
+    }
+    
+    .handle-bottom-right {
+        bottom: -9px !important;
+        right: -9px !important;
+    }
+}
+
+/* Mejorar la firma automática en el panel */
+.auto-signature-preview {
+    min-height: 90px !important; /* Más pequeño */
+    padding: 8px !important;
+}
+
+.auto-signature-preview img {
+    max-height: 70px !important; /* Más pequeño */
+    max-width: 95% !important;
+}
