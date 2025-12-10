@@ -1814,106 +1814,112 @@ class DocumentService {
     static async findSignaturePosition() {
         return new Promise(async (resolve, reject) => {
             try {
-                if (!this.currentDocument) {
-                    console.log('⚠️ No hay documento cargado');
-                    resolve({ x: 150, y: 150 });
+                console.log('🔍 BUSCANDO ESPACIOS DE FIRMA EN EL DOCUMENTO...');
+                
+                // USAR EL CANVAS DE ANÁLISIS
+                const analysisCanvas = document.getElementById('analysisCanvas');
+                const displayCanvas = document.getElementById('documentCanvas');
+                
+                if (!analysisCanvas || !displayCanvas) {
+                    console.log('❌ Canvases no disponibles');
+                    resolve({ x: 200, y: 200 });
                     return;
                 }
                 
-                // USAR EL CANVAS DE ANÁLISIS EN VEZ DEL PRINCIPAL
-                const analysisCanvas = document.getElementById('analysisCanvas');
-                if (!analysisCanvas || analysisCanvas.width === 0) {
-                    // Fallback al canvas principal si el de análisis no está listo
-                    const canvas = document.getElementById('documentCanvas');
-                    if (!canvas) {
-                        console.log('⚠️ No hay canvas disponible');
-                        resolve({ x: 150, y: 150 });
-                        return;
-                    }
-                    
-                    // Copiar al canvas de análisis
-                    analysisCanvas.width = canvas.width;
-                    analysisCanvas.height = canvas.height;
+                // COPIAR CONTENIDO AL CANVAS DE ANÁLISIS SI ESTÁ VACÍO
+                if (analysisCanvas.width === 0) {
+                    analysisCanvas.width = displayCanvas.width;
+                    analysisCanvas.height = displayCanvas.height;
                     const analysisCtx = analysisCanvas.getContext('2d');
-                    analysisCtx.drawImage(canvas, 0, 0);
+                    const displayCtx = displayCanvas.getContext('2d');
+                    
+                    // Copiar contenido
+                    analysisCtx.drawImage(displayCanvas, 0, 0);
+                    console.log('✅ Contenido copiado al canvas de análisis');
                 }
                 
-                console.log('🎯 INICIANDO ANÁLISIS PIXEL POR PIXEL');
-                console.log(`📐 Tamaño del canvas de análisis: ${analysisCanvas.width}x${analysisCanvas.height}`);
+                console.log(`📐 Tamaño del documento: ${analysisCanvas.width}x${analysisCanvas.height}`);
                 
-                // ANÁLISIS COMPLETO PIXEL POR PIXEL
-                const allSpots = await this.comprehensivePixelAnalysis(analysisCanvas);
+                // EJECUTAR ANÁLISIS COMPLETO
+                const signatureSpots = await DocumentAnalyzer.findSignatureSpots(analysisCanvas);
                 
-                // ORDENAR POR CONFIANZA Y ELIMINAR DUPLICADOS
-                allSpots.sort((a, b) => b.confidence - a.confidence);
-                const uniqueSpots = this.removeDuplicateSpots(allSpots, 30);
+                console.log(`🎯 ${signatureSpots.length} espacios potenciales encontrados`);
                 
-                console.log(`✅ ${uniqueSpots.length} ubicaciones únicas encontradas`);
-                
-                // FILTRAR ESPACIOS NO OCUPADOS
-                const availableSpots = this.filterOccupiedSpots(uniqueSpots);
-                
-                if (availableSpots.length > 0) {
-                    // SELECCIONAR LA MEJOR UBICACIÓN DISPONIBLE
-                    const bestSpot = availableSpots[0];
-                    console.log('🎯 MEJOR UBICACIÓN DISPONIBLE:', bestSpot);
-                    
-                    resolve({
-                        x: bestSpot.x,
-                        y: bestSpot.y,
-                        fieldType: bestSpot.type,
-                        confidence: bestSpot.confidence,
-                        reason: bestSpot.reason || 'Análisis automático'
+                if (signatureSpots.length > 0) {
+                    // MOSTRAR LOS 5 MEJORES ESPACIOS (PARA DEPURACIÓN)
+                    console.log('🏆 MEJORES ESPACIOS ENCONTRADOS:');
+                    signatureSpots.slice(0, 5).forEach((spot, i) => {
+                        console.log(`   ${i+1}. (${Math.round(spot.x)}, ${Math.round(spot.y)}) - ${spot.type} - ${spot.reason} - Confianza: ${spot.confidence.toFixed(2)}`);
                     });
-                } else {
-                    // BÚSQUEDA EXHAUSTIVA SI NO HAY UBICACIONES ÓPTIMAS
-                    console.log('🔍 No hay ubicaciones óptimas, iniciando búsqueda exhaustiva...');
-                    const exhaustiveSpot = await this.findExhaustiveSignatureSpot(analysisCanvas);
                     
-                    if (exhaustiveSpot) {
-                        console.log('📍 Ubicación encontrada en búsqueda exhaustiva:', exhaustiveSpot);
-                        resolve({
-                            x: exhaustiveSpot.x,
-                            y: exhaustiveSpot.y,
-                            fieldType: 'exhaustive_search',
-                            confidence: 0.6,
-                            reason: 'Búsqueda exhaustiva en espacios vacíos'
-                        });
-                    } else {
-                        // FALLBACK INTELIGENTE
-                        const fallback = this.getDocumentBasedFallback(analysisCanvas.width, analysisCanvas.height);
-                        console.log('📍 Usando fallback inteligente:', fallback);
+                    // FILTRAR ESPACIOS OCUPADOS POR FIRMAS EXISTENTES
+                    const availableSpots = this.filterOccupiedSpots(signatureSpots);
+                    
+                    if (availableSpots.length > 0) {
+                        const bestSpot = availableSpots[0];
+                        console.log(`🎯 MEJOR ESPACIO DISPONIBLE: (${Math.round(bestSpot.x)}, ${Math.round(bestSpot.y)}) - ${bestSpot.reason}`);
+                        
+                        // DIBUJAR PUNTOS DE REFERENCIA EN EL CANVAS (PARA DEPURACIÓN)
+                        this.drawDebugMarkers(analysisCanvas, availableSpots.slice(0, 3));
                         
                         resolve({
-                            x: fallback.x,
-                            y: fallback.y,
-                            fieldType: 'intelligent_fallback',
-                            confidence: 0.4,
-                            reason: 'Fallback basado en tipo de documento'
+                            x: bestSpot.x,
+                            y: bestSpot.y,
+                            width: bestSpot.width || 150,
+                            height: bestSpot.height || 60,
+                            fieldType: bestSpot.type,
+                            confidence: bestSpot.confidence,
+                            reason: bestSpot.reason
                         });
+                    } else {
+                        console.log('⚠️ Todos los espacios están ocupados por firmas existentes');
+                        // BUSCAR NUEVO ESPACIO LEJOS DE FIRMAS EXISTENTES
+                        const newSpot = await this.findSpaceAwayFromSignatures(analysisCanvas);
+                        if (newSpot) {
+                            resolve(newSpot);
+                        } else {
+                            throw new Error('No se pudo encontrar espacio disponible');
+                        }
+                    }
+                } else {
+                    console.log('⚠️ No se encontraron espacios de firma en el análisis');
+                    // USAR ANÁLISIS ALTERNATIVO
+                    const fallbackSpot = await this.analyzeDocumentStructure(analysisCanvas);
+                    if (fallbackSpot) {
+                        resolve(fallbackSpot);
+                    } else {
+                        throw new Error('No se pudo analizar el documento');
                     }
                 }
                 
             } catch (error) {
                 console.error('❌ Error en análisis de documento:', error);
-                // FALLBACK DE EMERGENCIA
-                const canvas = document.getElementById('documentCanvas');
-                if (canvas) {
-                    resolve({ 
-                        x: canvas.width * 0.7 - 100, 
-                        y: canvas.height * 0.8 - 30,
-                        fieldType: 'emergency_fallback',
-                        confidence: 0.2,
-                        reason: 'Error en análisis, usando posición predeterminada'
-                    });
+                
+                // ANÁLISIS DE ÚLTIMO RECURSO: BUSCAR CUALQUIER ESPACIO VACÍO
+                const emergencySpot = await this.emergencySpaceSearch();
+                if (emergencySpot) {
+                    resolve(emergencySpot);
                 } else {
-                    resolve({ 
-                        x: 200, 
-                        y: 200,
-                        fieldType: 'default',
-                        confidence: 0.1,
-                        reason: 'Sin canvas disponible'
-                    });
+                    // FALLBACK ABSOLUTO (PERO NO LA ESQUINA INFERIOR DERECHA)
+                    const canvas = document.getElementById('documentCanvas');
+                    if (canvas) {
+                        // Buscar en el centro del documento, no en la esquina
+                        resolve({
+                            x: canvas.width * 0.5 - 75,
+                            y: canvas.height * 0.5 - 30,
+                            fieldType: 'emergency_center',
+                            confidence: 0.1,
+                            reason: 'Análisis falló, usando centro del documento'
+                        });
+                    } else {
+                        resolve({ 
+                            x: 200, 
+                            y: 200,
+                            fieldType: 'default',
+                            confidence: 0.05,
+                            reason: 'Error completo, usando posición predeterminada'
+                        });
+                    }
                 }
             }
         });
@@ -2502,24 +2508,241 @@ class DocumentService {
         }
         
         return signatureSpots.filter(spot => {
-            // VERIFICAR QUE EL SPOT NO SE SUPERPONGA CON FIRMAS EXISTENTES
             for (const sig of this.documentSignatures) {
+                const sigX = sig.x;
+                const sigY = sig.y;
                 const sigWidth = sig.width || 150;
                 const sigHeight = sig.height || 60;
                 
+                const spotX = spot.x;
+                const spotY = spot.y;
+                const spotWidth = spot.width || 150;
+                const spotHeight = spot.height || 60;
+                
                 // VERIFICAR SUPERPOSICIÓN
-                const overlap = !(spot.x + 150 < sig.x ||
-                                spot.x > sig.x + sigWidth ||
-                                spot.y + 60 < sig.y ||
-                                spot.y > sig.y + sigHeight);
+                const overlap = !(spotX + spotWidth < sigX ||
+                                spotX > sigX + sigWidth ||
+                                spotY + spotHeight < sigY ||
+                                spotY > sigY + sigHeight);
                 
                 if (overlap) {
-                    return false; // ESTE SPOT ESTÁ OCUPADO
+                    return false;
                 }
             }
             return true;
         });
     }
+
+    // MÉTODO PARA BUSCAR ESPACIO LEJOS DE FIRMAS EXISTENTES
+    static async findSpaceAwayFromSignatures(canvas) {
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        
+        // BUSCAR EN DIFERENTES ZONAS DEL DOCUMENTO
+        const searchZones = [
+            { x: width * 0.1, y: height * 0.1, name: 'top_left' },
+            { x: width * 0.3, y: height * 0.3, name: 'center_left' },
+            { x: width * 0.5, y: height * 0.5, name: 'center' },
+            { x: width * 0.7, y: height * 0.3, name: 'center_right' },
+            { x: width * 0.1, y: height * 0.7, name: 'bottom_left' },
+            { x: width * 0.5, y: height * 0.7, name: 'bottom_center' }
+            // NOTA: NO INCLUIMOS LA ESQUINA INFERIOR DERECHA
+        ];
+        
+        for (const zone of searchZones) {
+            // VERIFICAR SI EL ÁREA ESTÁ VACÍA
+            let isEmpty = true;
+            for (let dy = 0; dy < 60; dy += 10) {
+                for (let dx = 0; dx < 150; dx += 10) {
+                    const x = zone.x + dx;
+                    const y = zone.y + dy;
+                    
+                    if (x < width && y < height) {
+                        const pixel = ctx.getImageData(x, y, 1, 1).data;
+                        const brightness = (pixel[0] + pixel[1] + pixel[2]) / 3;
+                        
+                        if (brightness < 200) { // NO ESTÁ VACÍO
+                            isEmpty = false;
+                            break;
+                        }
+                    }
+                }
+                if (!isEmpty) break;
+            }
+            
+            // VERIFICAR QUE NO ESTÉ CERCA DE FIRMAS EXISTENTES
+            let isFarFromSignatures = true;
+            for (const sig of this.documentSignatures) {
+                const distance = Math.sqrt(
+                    Math.pow(zone.x - sig.x, 2) + 
+                    Math.pow(zone.y - sig.y, 2)
+                );
+                
+                if (distance < 100) {
+                    isFarFromSignatures = false;
+                    break;
+                }
+            }
+            
+            if (isEmpty && isFarFromSignatures) {
+                console.log(`✅ Espacio encontrado en zona ${zone.name}`);
+                return {
+                    x: zone.x,
+                    y: zone.y,
+                    fieldType: 'away_from_signatures',
+                    confidence: 0.7,
+                    reason: `Espacio lejos de firmas existentes (${zone.name})`
+                };
+            }
+        }
+        
+        return null;
+    }
+
+    // ANÁLISIS ALTERNATIVO DE ESTRUCTURA DEL DOCUMENTO
+    static async analyzeDocumentStructure(canvas) {
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        
+        console.log('🏗️ Analizando estructura del documento...');
+        
+        // BUSCAR GRANDES ÁREAS VACÍAS
+        const largeEmptyAreas = this.findLargeEmptyAreas(ctx, width, height);
+        
+        if (largeEmptyAreas.length > 0) {
+            const bestArea = largeEmptyAreas[0];
+            console.log(`✅ Área grande vacía encontrada: (${bestArea.x}, ${bestArea.y})`);
+            return {
+                x: bestArea.x,
+                y: bestArea.y,
+                fieldType: 'large_empty_area',
+                confidence: 0.8,
+                reason: `Área grande vacía (${bestArea.width}x${bestArea.height})`
+            };
+        }
+        
+        return null;
+    }
+
+    static findLargeEmptyAreas(ctx, width, height) {
+        const areas = [];
+        const minAreaWidth = 200;
+        const minAreaHeight = 100;
+        
+        // BUSCAR EN TODO EL DOCUMENTO
+        for (let y = 0; y < height - minAreaHeight; y += 20) {
+            for (let x = 0; x < width - minAreaWidth; x += 20) {
+                let isEmpty = true;
+                
+                // VERIFICAR EL ÁREA
+                for (let dy = 0; dy < minAreaHeight; dy += 5) {
+                    for (let dx = 0; dx < minAreaWidth; dx += 5) {
+                        const pixel = ctx.getImageData(x + dx, y + dy, 1, 1).data;
+                        const brightness = (pixel[0] + pixel[1] + pixel[2]) / 3;
+                        
+                        if (brightness < 230) {
+                            isEmpty = false;
+                            break;
+                        }
+                    }
+                    if (!isEmpty) break;
+                }
+                
+                if (isEmpty) {
+                    areas.push({
+                        x: x + 10,
+                        y: y + 10,
+                        width: minAreaWidth - 20,
+                        height: minAreaHeight - 20
+                    });
+                }
+            }
+        }
+        
+        return areas;
+    }
+    
+    // BÚSQUEDA DE EMERGENCIA
+    static async emergencySpaceSearch() {
+        const canvas = document.getElementById('documentCanvas');
+        if (!canvas) return null;
+        
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        
+        console.log('🚨 BÚSQUEDA DE EMERGENCIA DE ESPACIOS...');
+        
+        // ESCANEAR SISTEMÁTICAMENTE TODO EL DOCUMENTO
+        for (let y = 0; y < height - 60; y += 10) {
+            for (let x = 0; x < width - 150; x += 10) {
+                let emptyCount = 0;
+                let totalCount = 0;
+                
+                // VERIFICAR 10 PUNTOS ALEATORIOS EN EL ÁREA
+                for (let i = 0; i < 10; i++) {
+                    const rx = x + Math.floor(Math.random() * 150);
+                    const ry = y + Math.floor(Math.random() * 60);
+                    
+                    if (rx < width && ry < height) {
+                        const pixel = ctx.getImageData(rx, ry, 1, 1).data;
+                        const brightness = (pixel[0] + pixel[1] + pixel[2]) / 3;
+                        
+                        if (brightness > 200) {
+                            emptyCount++;
+                        }
+                        totalCount++;
+                    }
+                }
+                
+                if (totalCount > 0 && (emptyCount / totalCount) > 0.8) {
+                    console.log(`✅ Espacio de emergencia encontrado: (${x}, ${y})`);
+                    return {
+                        x: x + 5,
+                        y: y + 5,
+                        fieldType: 'emergency_search',
+                        confidence: 0.5,
+                        reason: 'Encontrado en búsqueda de emergencia'
+                    };
+                }
+            }
+        }
+        
+        return null;
+    }
+
+    // MÉTODO PARA DIBUJAR MARCAS DE DEPURACIÓN (OPCIONAL)
+    static drawDebugMarkers(canvas, spots) {
+        const ctx = canvas.getContext('2d');
+        
+        spots.forEach((spot, index) => {
+            // DIBUJAR UN CÍRCULO EN EL PUNTO
+            ctx.beginPath();
+            ctx.arc(spot.x, spot.y, 8, 0, Math.PI * 2);
+            ctx.fillStyle = index === 0 ? '#00ff00' : '#ffff00';
+            ctx.fill();
+            
+            // DIBUJAR TEXTO
+            ctx.fillStyle = '#000000';
+            ctx.font = '12px Arial';
+            ctx.fillText(`${index + 1}`, spot.x - 4, spot.y + 4);
+            
+            // DIBUJAR RECTÁNGULO DEL ESPACIO
+            ctx.strokeStyle = index === 0 ? '#00ff00' : '#ffff00';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(
+                spot.x - (spot.width || 150) / 2,
+                spot.y - (spot.height || 60) / 2,
+                spot.width || 150,
+                spot.height || 60
+            );
+        });
+        
+        console.log('🎨 Marcas de depuración dibujadas en el canvas de análisis');
+    }
+
 
     // ===========================================
     // NUEVO: Buscar líneas de firma (ALGORITMO PRINCIPAL)
@@ -5586,17 +5809,22 @@ class DocumentService {
         }
 
         try {
-            console.log('🔍 Buscando posición óptima para firma...');
+            console.log('🔍 ANALIZANDO DOCUMENTO PARA ENCONTRAR ESPACIO DE FIRMA...');
             
-            // BUSCAR POSICIÓN MEJORADA CON ANÁLISIS PIXEL POR PIXEL
+            // REALIZAR ANÁLISIS COMPLETO DEL DOCUMENTO
             const position = await this.findSignaturePosition();
             
-            console.log('🎯 Posición encontrada:', position);
+            console.log('🎯 ESPACIO ENCONTRADO:', position);
             
-            let width, height;
-            const canvas = document.getElementById('documentCanvas');
-            const canvasWidth = canvas ? canvas.width : 800;
-            const canvasHeight = canvas ? canvas.height : 600;
+            // MOSTRAR INFORMACIÓN DETALLADA EN CONSOLA
+            console.log(`📍 Ubicación: (${Math.round(position.x)}, ${Math.round(position.y)})`);
+            console.log(`📊 Confianza: ${position.confidence}`);
+            console.log(`🔧 Tipo: ${position.fieldType}`);
+            console.log(`📝 Razón: ${position.reason}`);
+            
+            // CALCULAR TAMAÑO DE LA FIRMA
+            let width = 150; // Tamaño predeterminado
+            let height = 60;
             
             if (this.currentSignature.type === 'upload') {
                 const img = new Image();
@@ -5607,29 +5835,21 @@ class DocumentService {
                     img.onerror = reject;
                 });
                 
-                // TAMAÑOS AJUSTADOS
-                const maxWidth = 150;
-                const maxHeight = 75;
+                // AJUSTAR TAMAÑO MANTENIENDO PROPORCIONES
+                const maxWidth = 200;
+                const maxHeight = 80;
                 
                 width = img.naturalWidth;
                 height = img.naturalHeight;
                 
-                // MANTENER PROPORCIÓN
                 if (width > maxWidth || height > maxHeight) {
                     const ratio = Math.min(maxWidth / width, maxHeight / height);
                     width = Math.round(width * ratio);
                     height = Math.round(height * ratio);
                 }
-                
-                // ASEGURAR TAMAÑO MÍNIMO
-                if (width < 50) width = 50;
-                if (height < 25) height = 25;
-            } else {
-                // PARA FIRMA AUTOMÁTICA, TAMAÑO COMPACTO
-                width = 170;
-                height = 60;
             }
-
+            
+            // CREAR OBJETO DE FIRMA CON INFORMACIÓN DE ANÁLISIS
             const signature = {
                 id: 'sig_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
                 data: this.currentSignature.data,
@@ -5641,53 +5861,54 @@ class DocumentService {
                 height: height,
                 timestamp: new Date(),
                 type: this.currentSignature.type,
-                placedBy: 'advanced_pixel_analysis',
-                confidence: position.confidence || 0.8,
-                fieldType: position.fieldType || 'unknown',
-                reason: position.reason || 'Análisis automático'
+                placedBy: 'advanced_document_analysis',
+                confidence: position.confidence,
+                fieldType: position.fieldType,
+                reason: position.reason,
+                analysisData: {
+                    documentWidth: document.getElementById('documentCanvas')?.width || 0,
+                    documentHeight: document.getElementById('documentCanvas')?.height || 0,
+                    analysisTime: new Date().toISOString()
+                }
             };
             
-            // AJUSTAR POSICIÓN PARA QUE NO SALGA DEL CANVAS
+            // VERIFICAR QUE LA POSICIÓN SEA VÁLIDA
+            const canvas = document.getElementById('documentCanvas');
             if (canvas) {
-                // ASEGURAR QUE LA FIRMA QUEPA
-                if (signature.x + signature.width > canvasWidth) {
-                    signature.x = canvasWidth - signature.width - 20;
+                // ASEGURAR QUE LA FIRMA NO SALGA DEL CANVAS
+                if (signature.x < 10) signature.x = 10;
+                if (signature.y < 10) signature.y = 10;
+                if (signature.x + signature.width > canvas.width - 10) {
+                    signature.x = canvas.width - signature.width - 10;
                 }
-                if (signature.y + signature.height > canvasHeight) {
-                    signature.y = canvasHeight - signature.height - 20;
-                }
-                
-                // ASEGURAR POSICIÓN MÍNIMA
-                signature.x = Math.max(20, signature.x);
-                signature.y = Math.max(20, signature.y);
-                
-                // SI LA POSICIÓN PARECE INCORRECTA, AJUSTAR
-                if (signature.x > canvasWidth * 0.9) {
-                    signature.x = canvasWidth * 0.7;
+                if (signature.y + signature.height > canvas.height - 10) {
+                    signature.y = canvas.height - signature.height - 10;
                 }
             }
             
+            // AGREGAR FIRMA A LA LISTA
             this.documentSignatures.push(signature);
             if (this.currentDocument) {
                 this.currentDocument.signatures = this.documentSignatures;
             }
             
+            // ACTUALIZAR INTERFAZ
             this.renderExistingSignatures();
             this.renderSignaturesList();
             
-            // MOSTRAR FEEDBACK VISUAL CON INFORMACIÓN DEL ANÁLISIS
+            // MOSTRAR FEEDBACK VISUAL
             setTimeout(() => {
                 const signatureElement = document.querySelector(`[data-signature-id="${signature.id}"]`);
                 if (signatureElement) {
                     signatureElement.classList.add('highlight-new');
                     
-                    // AGREGAR TOOLTIP CON DETALLES DEL ANÁLISIS
+                    // AGREGAR TOOLTIP CON INFORMACIÓN DEL ANÁLISIS
                     const tooltip = document.createElement('div');
                     tooltip.className = 'signature-analysis-tooltip';
                     tooltip.innerHTML = `
                         <strong>${signature.fieldType}</strong><br>
-                        <small>Confianza: ${Math.round((signature.confidence || 0.8) * 100)}%</small><br>
-                        <small>${signature.reason || ''}</small>
+                        <small>Confianza: ${Math.round(signature.confidence * 100)}%</small><br>
+                        <small>${signature.reason}</small>
                     `;
                     signatureElement.appendChild(tooltip);
                     
@@ -5698,11 +5919,23 @@ class DocumentService {
                 }
             }, 100);
             
-            showNotification(`✓ Firma colocada en ${signature.fieldType} (${Math.round((signature.confidence || 0.8) * 100)}% confianza)`);
+            // MOSTRAR NOTIFICACIÓN INFORMATIVA
+            const confidencePercent = Math.round(position.confidence * 100);
+            let message = '✓ Firma colocada ';
+            
+            if (confidencePercent > 80) {
+                message += `perfectamente en espacio detectado (${confidencePercent}% confianza)`;
+            } else if (confidencePercent > 50) {
+                message += `en espacio probable (${confidencePercent}% confianza)`;
+            } else {
+                message += `(${confidencePercent}% confianza)`;
+            }
+            
+            showNotification(message);
             
         } catch (error) {
-            console.error('Error al agregar firma:', error);
-            showNotification('Error al agregar la firma', 'error');
+            console.error('❌ Error al agregar firma:', error);
+            showNotification('Error al analizar el documento para colocar la firma', 'error');
         }
     }
 

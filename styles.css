@@ -5324,3 +5324,70 @@
     max-height: 70px !important; /* Más pequeño */
     max-width: 95% !important;
 }
+
+.signature-analysis-tooltip {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.85);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 10000;
+    pointer-events: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.1);
+    max-width: 200px;
+    text-align: center;
+    backdrop-filter: blur(5px);
+}
+
+.signature-analysis-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border-width: 6px;
+    border-style: solid;
+    border-color: rgba(0, 0, 0, 0.85) transparent transparent transparent;
+}
+
+.highlight-new {
+    animation: signature-pulse 2s ease-in-out;
+    box-shadow: 0 0 0 4px rgba(47, 108, 70, 0.5), 
+                0 0 20px rgba(47, 108, 70, 0.3);
+    border-radius: 4px;
+    transform: scale(1.02);
+    transition: transform 0.3s ease;
+}
+
+@keyframes signature-pulse {
+    0% { 
+        box-shadow: 0 0 0 0 rgba(47, 108, 70, 0.7), 
+                    0 0 0 0 rgba(47, 108, 70, 0.5);
+    }
+    70% { 
+        box-shadow: 0 0 0 10px rgba(47, 108, 70, 0), 
+                    0 0 0 20px rgba(47, 108, 70, 0);
+    }
+    100% { 
+        box-shadow: 0 0 0 0 rgba(47, 108, 70, 0), 
+                    0 0 0 0 rgba(47, 108, 70, 0);
+    }
+}
+
+/* Indicador visual para el análisis */
+.debug-marker {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 8px rgba(0,0,0,0.5);
+    pointer-events: none;
+    z-index: 9999;
+}
