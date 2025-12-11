@@ -909,6 +909,17 @@
         display: flex;
         gap: 8px;
     }
+    /* Ensure action buttons in the signatures header are always visible
+       (white text/borders on primary background) */
+    .signatures-header .signature-actions-sidebar .btn {
+        color: white !important;
+        border-color: rgba(255,255,255,0.35) !important;
+        background: transparent !important;
+    }
+    .signatures-header .signature-actions-sidebar .btn .btn-icon,
+    .signatures-header .signature-actions-sidebar .btn i {
+        color: white !important;
+    }
 
     .signatures-grid {
         display: grid;
