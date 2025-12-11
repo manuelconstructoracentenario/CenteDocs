@@ -51,6 +51,44 @@ class SupabaseStorageService {
                 } else {
                     throw new Error(`Error de Supabase: ${error.message}`);
                 }
+
+                // FALLBACK: si por alguna razón no encontramos elementos DOM o no se dibujaron,
+                // usar la información guardada en DocumentService.documentSignatures (coordenadas en px)
+                try {
+                    const savedSigs = DocumentService.documentSignatures || [];
+                    if (savedSigs.length > 0) {
+                        console.log('combineWithPDF: usando fallback con DocumentService.documentSignatures =', savedSigs.length);
+                        // displayCanvas puede no existir si el documento no está mostrado, usar atributos
+                        const displayCanvasAttr = document.getElementById('documentCanvas');
+                        const docCanvasPixelWidth = displayCanvasAttr ? displayCanvasAttr.width : canvas.width;
+                        const docCanvasPixelHeight = displayCanvasAttr ? displayCanvasAttr.height : canvas.height;
+                        const scaleXAttr = canvas.width / docCanvasPixelWidth;
+                        const scaleYAttr = canvas.height / docCanvasPixelHeight;
+
+                        for (const s of savedSigs) {
+                            try {
+                                const img = new Image();
+                                img.src = s.data; // data URL
+                                await this.waitForImageLoad(img);
+                                const x = (s.x || 0) * scaleXAttr;
+                                const y = (s.y || 0) * scaleYAttr;
+                                const width = (s.width || img.naturalWidth) * scaleXAttr;
+                                const height = (s.height || img.naturalHeight) * scaleYAttr;
+                                ctx.imageSmoothingEnabled = true;
+                                ctx.imageSmoothingQuality = 'high';
+                                try {
+                                    ctx.drawImage(img, x, y, width, height);
+                                } catch (innerErr) {
+                                    console.error('combineWithPDF fallback drawImage error', innerErr, { x, y, width, height });
+                                }
+                            } catch (imgErr) {
+                                console.warn('combineWithPDF fallback carga de imagen falló', imgErr);
+                            }
+                        }
+                    }
+                } catch (fbErr) {
+                    console.error('Error en fallback de combineWithPDF:', fbErr);
+                }
             }
 
             // Obtener URL pública del archivo
@@ -1110,52 +1148,61 @@ class FileService {
         if (isSigned) {
             signedBadge = '<div class="signed-badge"><i class="fas fa-signature"></i> Firmado</div>';
             
-            if (file.signatures && file.signatures.length > 0) {
-                const uniqueSigners = [];
-                const seenSigners = new Set();
+            // INFORMACIÓN ESPECIAL PARA DOCUMENTOS YA FIRMADOS
+            if (file.source === 'signed') {
+                signedBadge = '<div class="signed-badge fully-signed"><i class="fas fa-file-signature"></i> Documento Firmado</div>';
                 
-                file.signatures.forEach(signature => {
-                    if (!seenSigners.has(signature.userEmail)) {
-                        seenSigners.add(signature.userEmail);
-                        uniqueSigners.push(signature);
-                    }
-                });
-                
-                uniqueSigners.sort((a, b) => {
-                    const dateA = a.timestamp?.toDate?.() || a.timestamp || new Date(0);
-                    const dateB = b.timestamp?.toDate?.() || b.timestamp || new Date(0);
-                    return dateB - dateA;
-                });
-                
-                const displayedSigners = uniqueSigners.slice(0, 5);
-                const extraCount = uniqueSigners.length - 5;
-                
-                signersInfo = `
-                    <div class="signers-section">
-                        <div class="signers-header">
-                            <i class="fas fa-users"></i> Firmado por (${uniqueSigners.length}):
+                if (file.signatures && file.signatures.length > 0) {
+                    const uniqueSigners = [];
+                    const seenSigners = new Set();
+                    
+                    file.signatures.forEach(signature => {
+                        if (!seenSigners.has(signature.userEmail)) {
+                            seenSigners.add(signature.userEmail);
+                            uniqueSigners.push(signature);
+                        }
+                    });
+                    
+                    uniqueSigners.sort((a, b) => {
+                        const dateA = a.timestamp?.toDate?.() || a.timestamp || new Date(0);
+                        const dateB = b.timestamp?.toDate?.() || b.timestamp || new Date(0);
+                        return dateB - dateA;
+                    });
+                    
+                    const displayedSigners = uniqueSigners.slice(0, 5);
+                    const extraCount = uniqueSigners.length - 5;
+                    
+                    signersInfo = `
+                        <div class="signers-section">
+                            <div class="signers-header">
+                                <i class="fas fa-users"></i> Firmado por (${uniqueSigners.length}):
+                            </div>
+                            <div class="signers-icons-container">
+                                ${displayedSigners.map(signer => `
+                                    <div class="signer-icon-wrapper" 
+                                        data-signer-name="${signer.userName || 'Usuario'}" 
+                                        data-signer-date="${signer.timestamp ? new Date(signer.timestamp).toLocaleDateString() : 'Fecha desconocida'}"
+                                        onclick="FileService.showSignerTooltip(event, this)">
+                                        <div class="signer-avatar-small">${signer.userName?.substring(0, 1).toUpperCase() || '?'}</div>
+                                        <div class="signer-name-tooltip">${signer.userName || 'Usuario'}</div>
+                                    </div>
+                                `).join('')}
+                                ${extraCount > 0 ? `
+                                    <div class="signer-icon-wrapper signer-more" 
+                                        data-signer-name="${extraCount} persona(s) más" 
+                                        onclick="FileService.showSignerTooltip(event, this)">
+                                        <div class="signer-avatar-small">+${extraCount}</div>
+                                        <div class="signer-name-tooltip">${extraCount} persona(s) más</div>
+                                    </div>
+                                ` : ''}
+                            </div>
                         </div>
-                        <div class="signers-icons-container">
-                            ${displayedSigners.map(signer => `
-                                <div class="signer-icon-wrapper" 
-                                     data-signer-name="${signer.userName || 'Usuario'}" 
-                                     data-signer-date="${signer.timestamp ? new Date(signer.timestamp).toLocaleDateString() : 'Fecha desconocida'}"
-                                     onclick="FileService.showSignerTooltip(event, this)">
-                                    <div class="signer-avatar-small">${signer.userName?.substring(0, 1).toUpperCase() || '?'}</div>
-                                    <div class="signer-name-tooltip">${signer.userName || 'Usuario'}</div>
-                                </div>
-                            `).join('')}
-                            ${extraCount > 0 ? `
-                                <div class="signer-icon-wrapper signer-more" 
-                                     data-signer-name="${extraCount} persona(s) más" 
-                                     onclick="FileService.showSignerTooltip(event, this)">
-                                    <div class="signer-avatar-small">+${extraCount}</div>
-                                    <div class="signer-name-tooltip">${extraCount} persona(s) más</div>
-                                </div>
-                            ` : ''}
+                        <div class="signed-file-info">
+                            <i class="fas fa-info-circle"></i> 
+                            Este documento ya tiene las firmas incorporadas en la imagen.
                         </div>
-                    </div>
-                `;
+                    `;
+                }
             }
         }
         
@@ -1339,11 +1386,20 @@ class FileService {
     static async editOrSignFile(fileId) {
         const file = this.files.find(f => f.id === fileId);
         if (file) {
+            // Verificar si el archivo ya está firmado
+            if (file.source === 'signed') {
+                const confirmAdd = confirm(`Este documento ya tiene ${file.signatures?.length || 0} firma(s).\n\n¿Deseas agregar una nueva firma?\n\nIMPORTANTE: Las firmas existentes no se mostrarán como elementos interactivos porque ya están incorporadas en el documento.`);
+                
+                if (!confirmAdd) {
+                    return;
+                }
+            }
+            
             switchPage('documents');
             
             setTimeout(async () => {
                 await DocumentService.loadDocument(file);
-                showNotification(`Documento "${file.name}" cargado para edición/firma`);
+                showNotification(`Documento "${file.name}" cargado para ${file.source === 'signed' ? 'agregar más firmas' : 'edición/firma'}`);
             }, 100);
         }
     }
@@ -1632,143 +1688,54 @@ class SignatureGenerator {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             
-            // TAMAÑO MÁS PEQUEÑO: 400x90 (anterior 500x120)
-            const width = 400;
-            const height = 90;
+            // TAMAÑO COMPACTO: 250x60
+            const width = 250;
+            const height = 60;
             canvas.width = width;
             canvas.height = height;
             
             ctx.clearRect(0, 0, width, height);
             
             const name = user.name;
-            let nameLines = this.splitNameForLeftSide(name);
             
-            const leftWidth = 180; // Reducido de 250
-            
-            // Nombre más pequeño (lado izquierdo - igual que antes)
-            ctx.font = 'bold 18px "Segoe UI", Tahoma, Geneva, Verdana, sans-serif';
+            // Configurar fuente para el nombre (más grande)
+            ctx.font = 'bold 16px "Segoe UI", Tahoma, Geneva, Verdana, sans-serif';
             ctx.fillStyle = '#2f6c46';
-            ctx.textAlign = 'left';
+            ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
             
-            let nameY = (height - (nameLines.length * 22)) / 2;
-            nameLines.forEach(line => {
-                ctx.fillText(line, 10, nameY); // Reducido margen de 15 a 10
-                nameY += 22;
-            });
+            // Dibujar el nombre centrado en la parte superior
+            const nameY = 10;
+            ctx.fillText(name, width / 2, nameY);
             
-            // Línea divisoria más delgada
-            ctx.strokeStyle = '#2f6c46';
-            ctx.lineWidth = 0.5;
-            ctx.beginPath();
-            ctx.moveTo(leftWidth + 5, 10); // Reducido de 15
-            ctx.lineTo(leftWidth + 5, height - 10); // Reducido de 15
-            ctx.stroke();
-            
-            // ===========================================
-            // NUEVO: Información en la parte derecha con formato mejorado
-            // ===========================================
-            ctx.font = '10px "Segoe UI", Tahoma, Geneva, Verdana, sans-serif';
+            // Configurar fuente para la fecha (más pequeña)
+            ctx.font = '12px "Segoe UI", Tahoma, Geneva, Verdana, sans-serif';
             ctx.fillStyle = '#333333';
-            ctx.textAlign = 'left';
             
             const now = new Date();
-            const formattedDate = this.formatCompactDate(now);
+            const formattedDate = this.formatSimpleDate(now);
             
-            // "Firmado digitalmente por:" en una línea
-            let y = 15;
-            ctx.fillText("Firmado digitalmente por:", leftWidth + 15, y);
-            y += 15;
-            
-            // Nombre del usuario, dividido en 2 líneas si es muy largo
-            const nameParts = this.splitNameForRightSide(name);
-            nameParts.forEach(part => {
-                ctx.fillText(part, leftWidth + 15, y);
-                y += 15;
-            });
-            
-            // Fecha en tiempo real
-            y += 5; // Espacio extra antes de la fecha
-            ctx.fillText(formattedDate, leftWidth + 15, y);
+            // Dibujar la fecha debajo del nombre
+            const dateY = nameY + 22;
+            ctx.fillText(formattedDate, width / 2, dateY);
             
             const dataURL = canvas.toDataURL('image/png');
             resolve(dataURL);
         });
     }
 
-    // ===========================================
-    // NUEVA FUNCIÓN: Dividir nombre para el lado derecho
-    // ===========================================
-    static splitNameForRightSide(fullName) {
-        const words = fullName.trim().split(/\s+/);
-        const lines = [];
-        
-        if (words.length <= 2) {
-            // Si el nombre tiene 2 palabras o menos, una línea
-            lines.push(fullName);
-        } else if (words.length === 3) {
-            // Si tiene 3 palabras, ponemos las primeras dos en una línea y la tercera en otra
-            lines.push(words[0] + ' ' + words[1]);
-            lines.push(words[2]);
-        } else {
-            // 4 o más palabras: dividimos en dos líneas lo más equilibrado posible
-            const mid = Math.ceil(words.length / 2);
-            lines.push(words.slice(0, mid).join(' '));
-            lines.push(words.slice(mid).join(' '));
-        }
-        
-        return lines;
-    }
-
-    // ===========================================
-    // NUEVA FUNCIÓN: Formato de fecha más compacto
-    // ===========================================
-    static formatCompactDate(date) {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
+    // NUEVO MÉTODO: Formato simple de fecha
+    static formatSimpleDate(date) {
         const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
         const hours = String(date.getHours()).padStart(2, '0');
         const minutes = String(date.getMinutes()).padStart(2, '0');
         
         return `${day}/${month}/${year} ${hours}:${minutes}`;
     }
 
-    static splitNameForLeftSide(fullName) {
-        const words = fullName.trim().split(/\s+/);
-        
-        if (words.length === 4) {
-            return [
-                words[0] + ' ' + words[1],
-                words[2] + ' ' + words[3]
-            ];
-        } else if (words.length === 3) {
-            return [
-                words[0] + ' ' + words[1],
-                words[2]
-            ];
-        } else if (words.length === 2) {
-            return [words[0], words[1]];
-        } else {
-            return [fullName];
-        }
-    }
-    
-    static formatDate(date) {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const hours = String(date.getHours()).padStart(2, '0');
-        const minutes = String(date.getMinutes()).padStart(2, '0');
-        const seconds = String(date.getSeconds()).padStart(2, '0');
-        
-        const timezoneOffset = -date.getTimezoneOffset();
-        const offsetHours = String(Math.floor(Math.abs(timezoneOffset) / 60)).padStart(2, '0');
-        const offsetMinutes = String(Math.abs(timezoneOffset) % 60).padStart(2, '0');
-        const offsetSign = timezoneOffset >= 0 ? '+' : '-';
-        
-        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds} ${offsetSign}${offsetHours}:${offsetMinutes}`;
-    }
-    
+    // También actualiza este método para usar el nuevo formato
     static async createUserSignature(user) {
         try {
             const signatureData = await this.generateAutomaticSignature(user);
@@ -1776,7 +1743,7 @@ class SignatureGenerator {
             return {
                 data: signatureData,
                 type: 'auto',
-                fileName: `firma_automatica_${user.name.replace(/\s+/g, '_')}.png`,
+                fileName: `firma_${user.name.replace(/\s+/g, '_')}.png`,
                 userName: user.name,
                 userEmail: user.email,
                 timestamp: new Date()
@@ -1787,7 +1754,6 @@ class SignatureGenerator {
         }
     }
 }
-
 // ===========================================
 // CLASE DOCUMENT SERVICE COMPLETA Y MEJORADA
 // ===========================================
@@ -1803,6 +1769,9 @@ class DocumentService {
     static isResizingSignature = false;
     static currentDraggingSignature = null;
     static canvasClickHandler = null;
+    static canvasTouchEndHandler = null;
+    static _oldClickHandler = null;
+    static _oldTouchHandler = null;
     static touchStartX = 0;
     static touchStartY = 0;
     static lastTouchTime = 0;
@@ -5389,7 +5358,7 @@ class DocumentService {
                 id: file.id,
                 name: file.name,
                 type: file.type,
-                url: file.url, // Usar la URL reconstruida
+                url: file.url,
                 uploadDate: file.uploadDate || new Date(),
                 uploadedBy: file.uploadedBy || AppState.currentUser.uid,
                 uploadedByName: file.uploadedByName || AppState.currentUser.name,
@@ -5397,10 +5366,12 @@ class DocumentService {
                 pages: file.pages || 1,
                 size: file.size,
                 extension: file.extension,
-                source: file.source || 'uploaded'
+                source: file.source || 'uploaded'  // 'uploaded' o 'signed'
             };
             
-            if (file.signatures && file.signatures.length > 0) {
+            // SOLO CARGAMOS FIRMAS SI EL DOCUMENTO NO ES UN DOCUMENTO FIRMADO
+            // Porque en un documento firmado, las firmas ya están en la imagen
+            if (file.source !== 'signed' && file.signatures && file.signatures.length > 0) {
                 this.documentSignatures = [...file.signatures];
             }
             
@@ -5735,15 +5706,22 @@ class DocumentService {
         const signatureLayer = document.getElementById('signatureLayer');
         
         if (canvas && container) {
+            // Mantener dimensiones reales del canvas
             const originalWidth = canvas.width;
             const originalHeight = canvas.height;
             
+            // Calcular dimensiones visuales (solo CSS, no atributos)
             const scaledWidth = originalWidth * this.currentZoom;
             const scaledHeight = originalHeight * this.currentZoom;
             
-            canvas.style.width = scaledWidth + 'px';
-            canvas.style.height = scaledHeight + 'px';
+            // Aplicar zoom SOLO a la escala visual (transform), no al canvas físico
+            const zoomValue = this.currentZoom;
             
+            // Usar transform para zoom real (no cambia atributos del canvas)
+            canvas.style.transform = `scale(${zoomValue})`;
+            canvas.style.transformOrigin = 'top left';
+            
+            // Ajustar container para acomodar el tamaño escalado
             container.style.width = scaledWidth + 'px';
             container.style.height = scaledHeight + 'px';
             
@@ -5761,19 +5739,27 @@ class DocumentService {
 
     static repositionSignaturesForZoom() {
         const canvas = document.getElementById('documentCanvas');
-        if (!canvas) return;
-        // Usar dimensiones reales de visualización (CSS / bounding rect)
+        const signatureLayer = document.getElementById('signatureLayer');
+        if (!canvas || !signatureLayer) return;
+        
+        // Usar getBoundingClientRect para obtener dimensiones reales de visualización
         const displayRect = canvas.getBoundingClientRect();
-        const displayWidth = displayRect.width || parseFloat(canvas.style.width) || canvas.width;
-        const displayHeight = displayRect.height || parseFloat(canvas.style.height) || canvas.height;
+        const displayWidth = displayRect.width;
+        const displayHeight = displayRect.height;
 
-        // El canvas.width/height son las dimensiones en píxeles de la superficie
+        // El canvas.width/height son las dimensiones en píxeles de la superficie de dibujo
         const pixelWidth = canvas.width;
         const pixelHeight = canvas.height;
 
+        // Actualizar capa de firmas para coincidir con el tamaño escalado
+        signatureLayer.style.width = displayWidth + 'px';
+        signatureLayer.style.height = displayHeight + 'px';
+        
+        // Reposicionar cada firma
         this.documentSignatures.forEach(signature => {
             const signatureElement = document.querySelector(`[data-signature-id="${signature.id}"]`);
             if (signatureElement) {
+                // Calcular posición escalada basada en zoom
                 const scaledX = (signature.x / pixelWidth) * displayWidth;
                 const scaledY = (signature.y / pixelHeight) * displayHeight;
                 const scaledWidth = (signature.width / pixelWidth) * displayWidth;
@@ -5790,6 +5776,13 @@ class DocumentService {
     static renderExistingSignatures() {
         const signatureLayer = document.getElementById('signatureLayer');
         if (!signatureLayer) return;
+        
+        // NO RENDERIZAR FIRMAS SI EL DOCUMENTO YA ESTÁ FIRMADO
+        if (this.currentDocument && this.currentDocument.source === 'signed') {
+            signatureLayer.innerHTML = '';
+            console.log('Documento ya firmado: no se renderizan firmas interactivas');
+            return;
+        }
         
         signatureLayer.innerHTML = '';
         
@@ -5850,162 +5843,191 @@ class DocumentService {
     }
 
     // ===========================================
-    // REEMPLAZAR: enableSignatureMode - MODO CLIC MEJORADO
-    // ===========================================
     static enableSignatureMode() {
-        console.log('📋 enableSignatureMode() llamado');
+        console.log('%c🔵 enableSignatureMode activado', 'color: #2196F3; font-weight: bold; font-size: 14px');
         
         if (!this.currentSignature) {
-            console.warn('⚠️ No hay firma seleccionada');
+            console.warn('%c⚠️ No hay firma seleccionada', 'color: #ff9800');
             showNotification('No hay firma seleccionada', 'error');
             return;
         }
 
-        if (!this.currentDocument) {
-            console.warn('⚠️ No hay documento seleccionado');
-            showNotification('Primero selecciona un documento', 'error');
-            return;
-        }
-
-        const canvas = document.getElementById('documentCanvas');
-        if (!canvas) {
-            console.warn('⚠️ Canvas no encontrado, usando fallback automático');
-            // Si no hay canvas, colocar firma automáticamente
-            this.addSignatureToDocument();
-            return;
-        }
-
-        console.log('✓ Canvas encontrado, activando modo de clic');
         this.isSignatureMode = true;
         document.body.classList.add('signature-mode-active');
+        
+        const canvas = document.getElementById('documentCanvas');
+        const viewerContent = document.getElementById('viewerContent');
+        
+        console.log('%c📍 Canvas encontrado: ' + !!canvas, 'color: ' + (canvas ? '#4caf50' : '#f44336'));
+        console.log('%c📍 ViewerContent encontrado: ' + !!viewerContent, 'color: ' + (viewerContent ? '#4caf50' : '#f44336'));
+        
+        if (!canvas || !viewerContent) {
+            showNotification('Canvas no encontrado - intenta recargar', 'error');
+            this.isSignatureMode = false;
+            return;
+        }
+        
+        // Cambiar cursor
         canvas.style.cursor = 'crosshair';
+        viewerContent.style.cursor = 'crosshair';
+        showNotification('👆 Toca o haz clic donde deseas colocar la firma');
         
-        showNotification('✓ Haz clic donde deseas colocar la firma');
-        
-        // Remover handler anterior si existe
-        if (this.canvasClickHandler) {
-            canvas.removeEventListener('click', this.canvasClickHandler);
+        // IMPORTANTE: Limpieza completa de listeners previos
+        if (this._oldClickHandler) {
+            document.removeEventListener('click', this._oldClickHandler, true);
+            console.log('%c✓ Old click handler removido del document', 'color: #ff9800');
         }
-        if (this.canvasTouchHandler) {
-            canvas.removeEventListener('touchend', this.canvasTouchHandler);
+        if (this._oldTouchHandler) {
+            document.removeEventListener('touchend', this._oldTouchHandler, true);
+            console.log('%c✓ Old touch handler removido del document', 'color: #ff9800');
         }
         
-        // Handler para click en escritorio
-        this.canvasClickHandler = (e) => this.handleCanvasClickForSignature(e);
-        
-        // Handler para toque en móvil
-        this.canvasTouchHandler = (e) => this.handleCanvasTouchForSignature(e);
-        
-        canvas.addEventListener('click', this.canvasClickHandler);
-        canvas.addEventListener('touchend', this.canvasTouchHandler, { passive: false });
-        
-        // Fallback: si el usuario no hace clic en 5 segundos, colocar firma automáticamente
-        console.log('⏱️ Iniciando temporizador de 5 segundos para fallback automático');
-        this.signatureModeTimeout = setTimeout(() => {
-            if (this.isSignatureMode) {
-                console.log('⏰ Tiempo agotado, colocando firma automáticamente');
-                showNotification('⏰ Colocando firma automáticamente...');
-                
-                // Salir del modo de clic
-                this.isSignatureMode = false;
-                document.body.classList.remove('signature-mode-active');
-                canvas.style.cursor = 'default';
-                
-                // Remover listeners
-                canvas.removeEventListener('click', this.canvasClickHandler);
-                canvas.removeEventListener('touchend', this.canvasTouchHandler);
-                
-                // Colocar firma automáticamente
-                this.addSignatureToDocument();
+        // Crear nuevos handlers con closure adecuado
+        const clickHandler = (e) => {
+            console.log('%c🖱️ CLICK DETECTADO en:', 'color: #2196F3; font-weight: bold', e.target?.id || e.target?.className || 'elemento');
+            console.log('isSignatureMode:', this.isSignatureMode);
+            console.log('currentSignature:', !!this.currentSignature);
+            console.log('Event target:', e.target?.tagName, e.target?.id);
+            
+            // Verificar que el click fue en el canvas o en la zona del documento
+            const clickedOnDocument = e.target === canvas || 
+                                     e.target?.id === 'documentCanvas' ||
+                                     viewerContent?.contains(e.target);
+            
+            console.log('%c✓ Click en documento:', 'color: ' + (clickedOnDocument ? '#4caf50' : '#f44336'), clickedOnDocument);
+            
+            if (!clickedOnDocument) {
+                console.log('%c⚠️ Click fuera del documento, ignorando', 'color: #ff9800');
+                return;
             }
-        }, 5000);
-    }
-
-    static handleCanvasClickForSignature(e) {
-        console.log('🖱️ Click en canvas detectado');
+            
+            if (!this.isSignatureMode) {
+                console.warn('%c❌ isSignatureMode es false', 'color: #f44336');
+                return;
+            }
+            
+            if (!this.currentSignature) {
+                console.warn('%c❌ No hay currentSignature', 'color: #f44336');
+                return;
+            }
+            
+            console.log('%c✅ Condiciones válidas, procesando click', 'color: #4caf50; font-weight: bold');
+            
+            // Obtener coordenadas relativas al canvas
+            const rect = canvas.getBoundingClientRect();
+            console.log('%c📐 Canvas rect:', 'color: #9c27b0', { left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+            console.log('%c📐 Canvas actual size:', 'color: #9c27b0', { width: canvas.width, height: canvas.height });
+            
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            console.log('%c📏 Scale factors:', 'color: #673ab7', { scaleX, scaleY });
+            
+            const displayX = e.clientX - rect.left;
+            const displayY = e.clientY - rect.top;
+            const x = displayX * scaleX;
+            const y = displayY * scaleY;
+            
+            console.log(`%c📍 Display coords: (${Math.round(displayX)}, ${Math.round(displayY)})`, 'color: #4caf50');
+            console.log(`%c📍 Pixel coords: (${Math.round(x)}, ${Math.round(y)})`, 'color: #4caf50; font-weight: bold');
+            
+            // Prevenir que se propague
+            e.stopPropagation();
+            e.preventDefault();
+            
+            // DESACTIVAR INMEDIATAMENTE
+            this.isSignatureMode = false;
+            document.body.classList.remove('signature-mode-active');
+            canvas.style.cursor = 'default';
+            viewerContent.style.cursor = 'auto';
+            
+            // Remover listeners del documento (EN EL DOCUMENT, no en canvas)
+            document.removeEventListener('click', clickHandler, true);
+            document.removeEventListener('touchend', touchHandler, true);
+            console.log('%c✓ Listeners removidos del document', 'color: #4caf50');
+            
+            // Agregar firma CON DELAY
+            setTimeout(() => {
+                console.log(`%c📍 Llamando addSignatureToDocument con (${Math.round(x)}, ${Math.round(y)})`, 'color: #9c27b0; font-weight: bold');
+                this.addSignatureToDocument(x, y);
+            }, 50);
+        };
         
-        if (!this.isSignatureMode || !this.currentSignature) {
-            console.warn('⚠️ No estamos en modo de firma o no hay firma seleccionada');
-            return;
-        }
+        // Handler para toque (móvil)
+        const touchHandler = (e) => {
+            console.log('%c👆 TOUCH DETECTADO en:', 'color: #ff9800; font-weight: bold', e.target?.id || e.target?.className || 'elemento');
+            
+            // Verificar que el touch fue en el canvas o en la zona del documento
+            const touchedOnDocument = e.target === canvas || 
+                                     e.target?.id === 'documentCanvas' ||
+                                     viewerContent?.contains(e.target);
+            
+            if (!touchedOnDocument) {
+                console.log('%c⚠️ Touch fuera del documento, ignorando', 'color: #ff9800');
+                return;
+            }
+            
+            if (!this.isSignatureMode) {
+                console.warn('%c❌ isSignatureMode es false (touch)', 'color: #f44336');
+                return;
+            }
+            
+            if (!this.currentSignature) {
+                console.warn('%c❌ No hay currentSignature (touch)', 'color: #f44336');
+                return;
+            }
+            
+            if (!e.changedTouches || e.changedTouches.length === 0) {
+                console.warn('%c❌ Sin touch points', 'color: #f44336');
+                return;
+            }
+            
+            console.log('%c✅ Condiciones válidas (touch), procesando', 'color: #4caf50; font-weight: bold');
+            
+            const touch = e.changedTouches[0];
+            const rect = canvas.getBoundingClientRect();
+            
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            const displayX = touch.clientX - rect.left;
+            const displayY = touch.clientY - rect.top;
+            const x = displayX * scaleX;
+            const y = displayY * scaleY;
+            
+            console.log(`%c📍 Display coords: (${Math.round(displayX)}, ${Math.round(displayY)})`, 'color: #ff9800');
+            console.log(`%c📍 Pixel coords: (${Math.round(x)}, ${Math.round(y)})`, 'color: #ff9800; font-weight: bold');
+            
+            // Prevenir scroll
+            e.stopPropagation();
+            e.preventDefault();
+            
+            // DESACTIVAR INMEDIATAMENTE
+            this.isSignatureMode = false;
+            document.body.classList.remove('signature-mode-active');
+            canvas.style.cursor = 'default';
+            viewerContent.style.cursor = 'auto';
+            
+            // Remover listeners
+            document.removeEventListener('click', clickHandler, true);
+            document.removeEventListener('touchend', touchHandler, true);
+            console.log('%c✓ Listeners removidos del document', 'color: #ff9800');
+            
+            // Agregar firma CON DELAY
+            setTimeout(() => {
+                console.log(`%c📍 Llamando addSignatureToDocument con (${Math.round(x)}, ${Math.round(y)})`, 'color: #9c27b0; font-weight: bold');
+                this.addSignatureToDocument(x, y);
+            }, 50);
+        };
         
-        const canvas = document.getElementById('documentCanvas');
-        if (!canvas) {
-            console.warn('⚠️ Canvas no encontrado');
-            return;
-        }
+        // Guardar referencias
+        this._oldClickHandler = clickHandler;
+        this._oldTouchHandler = touchHandler;
         
-        const rect = canvas.getBoundingClientRect();
-        
-        // Convertir coordenadas CSS a píxeles del canvas
-        const scaleX = canvas.width / rect.width;
-        const scaleY = canvas.height / rect.height;
-        
-        const x = (e.clientX - rect.left) * scaleX;
-        const y = (e.clientY - rect.top) * scaleY;
-        
-        console.log(`🎯 Clic en posición: canvas=(${Math.round(x)}, ${Math.round(y)}), CSS=(${Math.round(e.clientX - rect.left)}, ${Math.round(e.clientY - rect.top)}), escala=(${scaleX.toFixed(2)}, ${scaleY.toFixed(2)})`);
-        
-        // Limpiar el temporizador de fallback
-        if (this.signatureModeTimeout) {
-            clearTimeout(this.signatureModeTimeout);
-            console.log('✓ Temporizador de fallback cancelado');
-        }
-        
-        // Salir del modo de firma
-        this.isSignatureMode = false;
-        document.body.classList.remove('signature-mode-active');
-        if (canvas) canvas.style.cursor = 'default';
-        
-        // Remover listeners
-        if (canvas) {
-            canvas.removeEventListener('click', this.canvasClickHandler);
-            canvas.removeEventListener('touchend', this.canvasTouchHandler);
-        }
-        
-        // Colocar firma en la posición especificada
-        console.log('📍 Llamando a addSignatureToDocument con coordenadas manuales');
-        this.addSignatureToDocument(x, y);
-    }
-
-    static handleCanvasTouchForSignature(e) {
-        if (!this.isSignatureMode || !this.currentSignature) {
-            return;
-        }
-        
-        // Evitar que sea arrastrable
-        e.preventDefault();
-        e.stopPropagation();
-        
-        const canvas = document.getElementById('documentCanvas');
-        if (!canvas) return;
-        
-        // Obtener el último toque
-        const touch = e.changedTouches[e.changedTouches.length - 1];
-        const rect = canvas.getBoundingClientRect();
-        
-        // Convertir coordenadas CSS a píxeles del canvas
-        const scaleX = canvas.width / rect.width;
-        const scaleY = canvas.height / rect.height;
-        
-        const x = (touch.clientX - rect.left) * scaleX;
-        const y = (touch.clientY - rect.top) * scaleY;
-        
-        console.log(`🎯 Toque en posición: (${Math.round(x)}, ${Math.round(y)})`);
-        
-        // Salir del modo de firma
-        this.isSignatureMode = false;
-        document.body.classList.remove('signature-mode-active');
-        if (canvas) canvas.style.cursor = 'default';
-        
-        // Remover listeners
-        if (canvas) {
-            canvas.removeEventListener('click', this.canvasClickHandler);
-            canvas.removeEventListener('touchend', this.canvasTouchHandler);
-        }
-        
-        // Colocar firma en la posición especificada
-        this.addSignatureToDocument(x, y);
+        // Agregar listeners AL DOCUMENTO (capture phase = true para interceptar antes)
+        console.log('%c🔗 Agregando listeners al DOCUMENT (capture phase)', 'color: #673ab7; font-weight: bold');
+        document.addEventListener('click', clickHandler, true);
+        document.addEventListener('touchend', touchHandler, { passive: false, capture: true });
+        console.log('%c✓ Listeners agregados - Esperando clic/toque del usuario...', 'color: #4caf50; font-weight: bold; font-size: 14px');
     }
 
     /*
@@ -6048,15 +6070,19 @@ class DocumentService {
     }
 
     // ===========================================
-    // MODIFICAR addSignatureToDocument para aceptar posición manual
+    // MODIFICAR addSignatureToDocument para modo automático inteligente
     // ===========================================
     static async addSignatureToDocument(manualX = null, manualY = null) {
+        console.log('🟢 addSignatureToDocument llamado con:', { manualX, manualY });
+        
         if (!this.currentSignature) {
+            console.warn('⚠️ No hay firma seleccionada');
             showNotification('No hay firma seleccionada', 'error');
             return;
         }
 
         if (!this.currentDocument) {
+            console.warn('⚠️ No hay documento seleccionado');
             showNotification('Primero selecciona un documento', 'error');
             return;
         }
@@ -6064,20 +6090,20 @@ class DocumentService {
         try {
             let position;
             
-            // Si se especifica posición manual (clic/toque del usuario), usarla
+            // Si el usuario especificó una posición (clic/toque), usarla
             if (manualX !== null && manualY !== null) {
-                console.log(`📍 Usando posición manual: (${Math.round(manualX)}, ${Math.round(manualY)})`);
+                console.log(`📍 Usando posición del usuario: (${Math.round(manualX)}, ${Math.round(manualY)})`);
                 position = {
                     x: manualX,
                     y: manualY,
-                    fieldType: 'manual_click',
-                    confidence: 1.0,
-                    reason: 'Posición seleccionada por el usuario'
+                    fieldType: 'user_click',
+                    confidence: 1.0
                 };
             } else {
-                // Fallback: buscar automáticamente
-                console.log('🔍 Buscando mejor ubicación para la firma...');
-                position = await this.findSignaturePosition();
+                // Fallback: buscar automáticamente si no hay posición manual
+                console.log('🔍 Buscando ubicación automática...');
+                const autoPosition = await this.findSignaturePosition();
+                position = autoPosition;
                 console.log('🎯 Posición encontrada:', position);
             }
             
@@ -6132,10 +6158,9 @@ class DocumentService {
                 height: height,
                 timestamp: new Date(),
                 type: this.currentSignature.type,
-                placedBy: position.fieldType === 'manual_click' ? 'manual_click' : 'auto_placement',
+                placedBy: 'user_placement',
                 confidence: position.confidence,
-                fieldType: position.fieldType,
-                reason: position.reason
+                fieldType: position.fieldType
             };
             
             // Agregar firma a la lista
@@ -6149,7 +6174,8 @@ class DocumentService {
             this.renderSignaturesList();
             
             // Mostrar notificación
-            showNotification(`✓ Firma colocada. Puedes mover y redimensionar libremente`);
+            showNotification(`✓ Firma colocada. Puedes mover y redimensionar`);
+            showNotification(`✓ Firma colocada. Puedes mover y redimensionar con el ratón/táctil`);
             
         } catch (error) {
             console.error('❌ Error al agregar firma:', error);
@@ -6161,7 +6187,9 @@ class DocumentService {
     // REEMPLAZAR: setCurrentSignature
     // ===========================================
     static setCurrentSignature(signatureData) {
+        console.log('🔷 setCurrentSignature llamado con:', signatureData);
         this.currentSignature = signatureData;
+        console.log('✓ currentSignature asignado');
         this.enableSignatureMode();
     }
 
@@ -6417,23 +6445,43 @@ class DocumentExportService {
 
                 const displayCanvas = document.getElementById('documentCanvas');
                 const signatureLayer = document.getElementById('signatureLayer');
-                
-                const scaleFactorX = canvas.width / displayCanvas.width;
-                const scaleFactorY = canvas.height / displayCanvas.height;
-                
-                const signatures = signatureLayer.querySelectorAll('.document-signature');
-                for (const signature of signatures) {
-                    const img = signature.querySelector('img');
-                    if (img && img.src) {
-                        await this.waitForImageLoad(img);
-                        const x = parseFloat(signature.style.left) * scaleFactorX;
-                        const y = parseFloat(signature.style.top) * scaleFactorY;
-                        const width = parseFloat(signature.style.width) * scaleFactorX;
-                        const height = parseFloat(signature.style.height) * scaleFactorY;
-                        
-                        ctx.imageSmoothingEnabled = true;
-                        ctx.imageSmoothingQuality = 'high';
-                        ctx.drawImage(img, x, y, width, height);
+
+                if (!displayCanvas || !signatureLayer) {
+                    console.warn('combineWithPDF: canvas o signatureLayer no encontrados');
+                } else {
+                    // Usar bounding rect para obtener el tamaño real mostrado (CSS/transform)
+                    const displayRect = displayCanvas.getBoundingClientRect();
+                    const displayWidth = displayRect.width;
+                    const displayHeight = displayRect.height;
+
+                    const scaleFactorX = canvas.width / displayWidth;
+                    const scaleFactorY = canvas.height / displayHeight;
+
+                    const signatures = signatureLayer.querySelectorAll('.document-signature');
+                    console.log(`combineWithPDF: firmas detectadas = ${signatures.length}`, { scaleFactorX, scaleFactorY });
+
+                    for (const signature of signatures) {
+                        const img = signature.querySelector('img');
+                        if (img && img.src) {
+                            await this.waitForImageLoad(img);
+                            const left = parseFloat(signature.style.left) || 0;
+                            const top = parseFloat(signature.style.top) || 0;
+                            const w = parseFloat(signature.style.width) || img.naturalWidth;
+                            const h = parseFloat(signature.style.height) || img.naturalHeight;
+
+                            const x = left * scaleFactorX;
+                            const y = top * scaleFactorY;
+                            const width = w * scaleFactorX;
+                            const height = h * scaleFactorY;
+
+                            ctx.imageSmoothingEnabled = true;
+                            ctx.imageSmoothingQuality = 'high';
+                            try {
+                                ctx.drawImage(img, x, y, width, height);
+                            } catch (drawErr) {
+                                console.error('Error dibujando imagen de firma en PDF canvas:', drawErr, { x, y, width, height, imgSrc: img.src });
+                            }
+                        }
                     }
                 }
 
@@ -6486,25 +6534,42 @@ class DocumentExportService {
                 
                 const displayCanvas = document.getElementById('documentCanvas');
                 const signatureLayer = document.getElementById('signatureLayer');
-                
-                const scaleFactorX = canvas.width / displayCanvas.width;
-                const scaleFactorY = canvas.height / displayCanvas.height;
-                
-                const signatures = signatureLayer.querySelectorAll('.document-signature');
-                for (const signature of signatures) {
-                    const imgSignature = signature.querySelector('img');
-                    if (imgSignature && imgSignature.src) {
-                        await this.waitForImageLoad(imgSignature);
-                        const x = parseFloat(signature.style.left) * scaleFactorX;
-                        const y = parseFloat(signature.style.top) * scaleFactorY;
-                        const width = parseFloat(signature.style.width) * scaleFactorX;
-                        const height = parseFloat(signature.style.height) * scaleFactorY;
-                        ctx.imageSmoothingEnabled = true;
-                        ctx.imageSmoothingQuality = 'high';
-                        ctx.drawImage(imgSignature, x, y, width, height);
-                                           ctx.imageSmoothingEnabled = true;
-                        ctx.imageSmoothingQuality = 'high';
-                        ctx.drawImage(imgSignature, x, y, width, height);
+
+                if (!displayCanvas || !signatureLayer) {
+                    console.warn('combineWithImage: canvas o signatureLayer no encontrados');
+                } else {
+                    const displayRect = displayCanvas.getBoundingClientRect();
+                    const displayWidth = displayRect.width;
+                    const displayHeight = displayRect.height;
+
+                    const scaleFactorX = canvas.width / displayWidth;
+                    const scaleFactorY = canvas.height / displayHeight;
+
+                    const signatures = signatureLayer.querySelectorAll('.document-signature');
+                    console.log(`combineWithImage: firmas detectadas = ${signatures.length}`, { scaleFactorX, scaleFactorY });
+
+                    for (const signature of signatures) {
+                        const imgSignature = signature.querySelector('img');
+                        if (imgSignature && imgSignature.src) {
+                            await this.waitForImageLoad(imgSignature);
+                            const left = parseFloat(signature.style.left) || 0;
+                            const top = parseFloat(signature.style.top) || 0;
+                            const w = parseFloat(signature.style.width) || imgSignature.naturalWidth;
+                            const h = parseFloat(signature.style.height) || imgSignature.naturalHeight;
+
+                            const x = left * scaleFactorX;
+                            const y = top * scaleFactorY;
+                            const width = w * scaleFactorX;
+                            const height = h * scaleFactorY;
+
+                            ctx.imageSmoothingEnabled = true;
+                            ctx.imageSmoothingQuality = 'high';
+                            try {
+                                ctx.drawImage(imgSignature, x, y, width, height);
+                            } catch (drawErr) {
+                                console.error('Error dibujando imagen de firma en image canvas:', drawErr, { x, y, width, height, imgSrc: imgSignature.src });
+                            }
+                        }
                     }
                 }
                 
@@ -7293,6 +7358,9 @@ DocumentService.saveDocumentWithSignatures = async function() {
     showNotification('Guardando documento firmado en la nube...');
     
     try {
+        console.log('saveDocumentWithSignatures: documentSignatures count =', this.documentSignatures.length, this.documentSignatures);
+        const signatureLayer = document.getElementById('signatureLayer');
+        console.log('saveDocumentWithSignatures: signatureLayer children =', signatureLayer ? signatureLayer.children.length : 'no layer');
         const result = await DocumentExportService.combineSignaturesWithDocument();
         
         // AGREGAR firmante actual a las firmas si no está
