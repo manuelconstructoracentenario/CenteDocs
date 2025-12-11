@@ -2049,28 +2049,28 @@ class DocumentService {
         
         console.log(`📐 Proporción del documento: ${aspectRatio.toFixed(2)}`);
         
+        // Posición por defecto: zona inferior del documento
+        // Centro-derecha para documentos apaisados, centro para documentos verticales
+        let x, y;
+        
         if (aspectRatio > 1.5) {
-            // Documento horizontal (landscape)
-            console.log('📄 Documento horizontal - firma en esquina inferior derecha');
-            return {
-                x: width * 0.75 - 75,
-                y: height * 0.85 - 30
-            };
+            // Documento horizontal (apaisado) - firma en derecha
+            x = width * 0.55;
+            y = height * 0.8;
+            console.log('📄 Documento apaisado - firma en derecha inferior');
         } else if (aspectRatio < 0.8) {
-            // Documento vertical estrecho
-            console.log('📄 Documento vertical estrecho - firma en esquina inferior izquierda');
-            return {
-                x: width * 0.15,
-                y: height * 0.85 - 30
-            };
+            // Documento vertical estrecho - firma centrada en izquierda
+            x = width * 0.15;
+            y = height * 0.8;
+            console.log('📄 Documento vertical - firma en izquierda inferior');
         } else {
-            // Documento estándar (vertical o cuadrado)
-            console.log('📄 Documento estándar - firma en esquina inferior derecha');
-            return {
-                x: width * 0.65 - 75,
-                y: height * 0.88 - 30
-            };
+            // Documento estándar (A4) - firma en derecha pero centrada
+            x = width * 0.55;
+            y = height * 0.8;
+            console.log('📄 Documento estándar - firma en derecha-centro inferior');
         }
+        
+        return { x, y };
     }
 
 
@@ -4995,18 +4995,20 @@ class DocumentService {
     }
 
     // ===========================================
-    // NUEVO: MÉTODO MEJORADO PARA INTERACTIVIDAD DE FIRMAS
+    // NUEVO: MÉTODO MEJORADO PARA INTERACTIVIDAD DE FIRMAS (CON SOPORTE MÓVIL NATIVO)
     // ===========================================
     static makeSignatureInteractive(element, signatureData) {
-        // Remover eventos previos si existen
+        // Limpiar eventos previos
         element.removeEventListener('mousedown', element._mouseHandler);
         element.removeEventListener('touchstart', element._touchHandler);
         
-        // Handler para mouse
+        // Permitir arrastre
+        element.style.touchAction = 'none';
+        element.style.userSelect = 'none';
+        element.style.webkitUserSelect = 'none';
+        
+        // Handler para mouse (escritorio)
         const mouseHandler = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            
             if (e.target.classList.contains('signature-handle')) {
                 this.startResize(e, element, signatureData);
             } else {
@@ -5014,60 +5016,28 @@ class DocumentService {
             }
         };
         
-        // Handler para touch
+        // Handler para touch (móvil) - NATIVO, sin conversión a mouse
         const touchHandler = (e) => {
             e.preventDefault();
             e.stopPropagation();
             
             if (e.touches.length === 1) {
                 const touch = e.touches[0];
-                
-                // Guardar posición inicial del toque
-                this.touchStartX = touch.clientX;
-                this.touchStartY = touch.clientY;
-                
-                // Verificar si es toque en handle o en la firma
                 const target = document.elementFromPoint(touch.clientX, touch.clientY);
                 
                 if (target && target.classList.contains('signature-handle')) {
-                    this.isResizingSignature = true;
-                    this.isDraggingSignature = false;
-                    
-                    // Simular evento mouse para resize
-                    const mouseEvent = new MouseEvent('mousedown', {
-                        clientX: touch.clientX,
-                        clientY: touch.clientY,
-                        bubbles: true,
-                        cancelable: true,
-                        view: window
-                    });
-                    target.dispatchEvent(mouseEvent);
-                    
+                    // Redimensionar
+                    this.startResizeTouch(e, element, signatureData);
                 } else {
-                    this.isDraggingSignature = true;
-                    this.isResizingSignature = false;
-                    
-                    // Simular evento mouse para drag
-                    const mouseEvent = new MouseEvent('mousedown', {
-                        clientX: touch.clientX,
-                        clientY: touch.clientY,
-                        bubbles: true,
-                        cancelable: true,
-                        view: window
-                    });
-                    element.dispatchEvent(mouseEvent);
+                    // Arrastrar
+                    this.startDragTouch(e, element, signatureData);
                 }
-                
-                // Guardar tiempo del toque
-                this.lastTouchTime = Date.now();
             }
         };
         
-        // Guardar referencias a los handlers
         element._mouseHandler = mouseHandler;
         element._touchHandler = touchHandler;
         
-        // Agregar eventos
         element.addEventListener('mousedown', mouseHandler);
         element.addEventListener('touchstart', touchHandler, { passive: false });
         
@@ -5076,269 +5046,238 @@ class DocumentService {
             e.stopPropagation();
             this.selectSignature(element);
         });
-        
-        // Doble toque para seleccionar (móvil)
-        element.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            const currentTime = Date.now();
-            const timeDiff = currentTime - this.lastTouchTime;
-            
-            // Si fue un toque rápido y no se arrastró, seleccionar
-            if (timeDiff < 300 && !this.isDraggingSignature && !this.isResizingSignature) {
-                this.selectSignature(element);
-            }
-            
-            // Resetear estados
-            setTimeout(() => {
-                this.isDraggingSignature = false;
-                this.isResizingSignature = false;
-            }, 100);
-        }, { passive: false });
-        
-        // Touch cancel
-        element.addEventListener('touchcancel', () => {
-            this.isDraggingSignature = false;
-            this.isResizingSignature = false;
-        });
-        
-        // Asegurar que las firmas sean seleccionables en móvil
-        element.style.touchAction = 'none';
-        element.style.userSelect = 'none';
-        element.style.webkitUserSelect = 'none';
-        
-        // Añadir clase para móvil
-        if (this.isTouchDevice) {
-            element.classList.add('mobile-touch-enabled');
-        }
     }
 
     // ===========================================
-    // NUEVO: MÉTODO MEJORADO PARA ARRASTRAR
+    // NUEVO: ARRASTRE NATIVO PARA TOUCH
+    // ===========================================
+    static startDragTouch(e, element, signatureData) {
+        const touch = e.touches[0];
+        const startX = touch.clientX;
+        const startY = touch.clientY;
+        const startLeft = parseFloat(element.style.left) || 0;
+        const startTop = parseFloat(element.style.top) || 0;
+        
+        const dragMove = (moveEvent) => {
+            const currentTouch = moveEvent.touches[0];
+            const dx = currentTouch.clientX - startX;
+            const dy = currentTouch.clientY - startY;
+            
+            let newLeft = startLeft + dx;
+            let newTop = startTop + dy;
+            
+            // Limitar al canvas
+            const canvas = document.getElementById('documentCanvas');
+            if (canvas) {
+                const rect = canvas.getBoundingClientRect();
+                const elementRect = element.getBoundingClientRect();
+                
+                if (newLeft < 0) newLeft = 0;
+                if (newTop < 0) newTop = 0;
+                if (newLeft + elementRect.width > rect.right - rect.left) {
+                    newLeft = rect.right - rect.left - elementRect.width;
+                }
+                if (newTop + elementRect.height > rect.bottom - rect.top) {
+                    newTop = rect.bottom - rect.top - elementRect.height;
+                }
+            }
+            
+            element.style.left = newLeft + 'px';
+            element.style.top = newTop + 'px';
+            
+            signatureData.x = newLeft;
+            signatureData.y = newTop;
+        };
+        
+        const dragEnd = () => {
+            document.removeEventListener('touchmove', dragMove, { passive: false });
+            document.removeEventListener('touchend', dragEnd, { passive: false });
+            document.removeEventListener('touchcancel', dragEnd, { passive: false });
+        };
+        
+        document.addEventListener('touchmove', dragMove, { passive: false });
+        document.addEventListener('touchend', dragEnd, { passive: false });
+        document.addEventListener('touchcancel', dragEnd, { passive: false });
+    }
+
+    // ===========================================
+    // NUEVO: REDIMENSIÓN NATIVA PARA TOUCH
+    // ===========================================
+    static startResizeTouch(e, element, signatureData) {
+        const touch = e.touches[0];
+        const handle = document.elementFromPoint(touch.clientX, touch.clientY);
+        const handleClass = handle?.className || '';
+        
+        const startX = touch.clientX;
+        const startY = touch.clientY;
+        const startWidth = parseFloat(element.style.width) || element.offsetWidth;
+        const startHeight = parseFloat(element.style.height) || element.offsetHeight;
+        const startLeft = parseFloat(element.style.left) || 0;
+        const startTop = parseFloat(element.style.top) || 0;
+        
+        const minWidth = 50;
+        const minHeight = 30;
+        
+        const resizeMove = (moveEvent) => {
+            const currentTouch = moveEvent.touches[0];
+            const dx = currentTouch.clientX - startX;
+            const dy = currentTouch.clientY - startY;
+            
+            let newWidth = startWidth;
+            let newHeight = startHeight;
+            let newLeft = startLeft;
+            let newTop = startTop;
+            
+            if (handleClass.includes('handle-right')) {
+                newWidth = Math.max(minWidth, startWidth + dx);
+            }
+            if (handleClass.includes('handle-left')) {
+                newWidth = Math.max(minWidth, startWidth - dx);
+                newLeft = startLeft + dx;
+            }
+            if (handleClass.includes('handle-bottom')) {
+                newHeight = Math.max(minHeight, startHeight + dy);
+            }
+            if (handleClass.includes('handle-top')) {
+                newHeight = Math.max(minHeight, startHeight - dy);
+                newTop = startTop + dy;
+            }
+            
+            element.style.width = newWidth + 'px';
+            element.style.height = newHeight + 'px';
+            element.style.left = newLeft + 'px';
+            element.style.top = newTop + 'px';
+            
+            signatureData.width = newWidth;
+            signatureData.height = newHeight;
+            signatureData.x = newLeft;
+            signatureData.y = newTop;
+        };
+        
+        const resizeEnd = () => {
+            document.removeEventListener('touchmove', resizeMove, { passive: false });
+            document.removeEventListener('touchend', resizeEnd, { passive: false });
+            document.removeEventListener('touchcancel', resizeEnd, { passive: false });
+        };
+        
+        document.addEventListener('touchmove', resizeMove, { passive: false });
+        document.addEventListener('touchend', resizeEnd, { passive: false });
+        document.addEventListener('touchcancel', resizeEnd, { passive: false });
+    }
+
+    // ===========================================
+    // NUEVO: MÉTODO MEJORADO PARA ARRASTRAR (MOUSE/ESCRITORIO)
     // ===========================================
     static startDrag(e, element, signatureData) {
         e.preventDefault();
         e.stopPropagation();
         
-        // Verificar si es touch o mouse
-        const isTouch = e.type === 'touchstart' || e.type.startsWith('touch');
-        this.isDraggingSignature = true;
-        this.currentDraggingSignature = { element, signatureData };
-
-        // Obtener coordenadas iniciales
-        const startX = isTouch ? e.touches[0].clientX : e.clientX;
-        const startY = isTouch ? e.touches[0].clientY : e.clientY;
-        const startLeft = parseFloat(element.style.left);
-        const startTop = parseFloat(element.style.top);
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const startLeft = parseFloat(element.style.left) || 0;
+        const startTop = parseFloat(element.style.top) || 0;
         
-        // Obtener el contenedor del documento
-        const container = document.getElementById('documentContainer');
-        const canvas = document.getElementById('documentCanvas');
-        
-        // Función para mover
         const dragMove = (moveEvent) => {
-            if (!this.isDraggingSignature) return;
-            
-            // Prevenir comportamiento por defecto (scroll)
-            moveEvent.preventDefault();
-            
-            const currentX = isTouch ? moveEvent.touches[0].clientX : moveEvent.clientX;
-            const currentY = isTouch ? moveEvent.touches[0].clientY : moveEvent.clientY;
-            
-            const dx = currentX - startX;
-            const dy = currentY - startY;
+            const dx = moveEvent.clientX - startX;
+            const dy = moveEvent.clientY - startY;
             
             let newLeft = startLeft + dx;
             let newTop = startTop + dy;
             
-            // Limitar al área del documento
+            // Limitar al canvas
+            const canvas = document.getElementById('documentCanvas');
             if (canvas) {
-                const canvasRect = canvas.getBoundingClientRect();
+                const rect = canvas.getBoundingClientRect();
                 const elementRect = element.getBoundingClientRect();
                 
-                // Convertir coordenadas relativas al canvas
-                const relativeLeft = newLeft / this.currentZoom;
-                const relativeTop = newTop / this.currentZoom;
-                const relativeWidth = element.offsetWidth / this.currentZoom;
-                const relativeHeight = element.offsetHeight / this.currentZoom;
-                
-                // Asegurarse de que no salga del canvas
-                if (relativeLeft < 0) newLeft = 0;
-                if (relativeTop < 0) newTop = 0;
-                if (relativeLeft + relativeWidth > canvas.width) {
-                    newLeft = (canvas.width - relativeWidth) * this.currentZoom;
+                if (newLeft < 0) newLeft = 0;
+                if (newTop < 0) newTop = 0;
+                if (newLeft + elementRect.width > rect.right - rect.left) {
+                    newLeft = rect.right - rect.left - elementRect.width;
                 }
-                if (relativeTop + relativeHeight > canvas.height) {
-                    newTop = (canvas.height - relativeHeight) * this.currentZoom;
+                if (newTop + elementRect.height > rect.bottom - rect.top) {
+                    newTop = rect.bottom - rect.top - elementRect.height;
                 }
             }
             
-            // Aplicar transformación
             element.style.left = newLeft + 'px';
             element.style.top = newTop + 'px';
             
-            // Actualizar datos de la firma
             signatureData.x = newLeft;
             signatureData.y = newTop;
-            
-            // Forzar reflow para mejor rendimiento
-            element.style.transform = 'translateZ(0)';
         };
-
-        // Función para finalizar
+        
         const dragEnd = () => {
-            this.isDraggingSignature = false;
-            this.currentDraggingSignature = null;
-            
-            if (isTouch) {
-                document.removeEventListener('touchmove', dragMove);
-                document.removeEventListener('touchend', dragEnd);
-                document.removeEventListener('touchcancel', dragEnd);
-            } else {
-                document.removeEventListener('mousemove', dragMove);
-                document.removeEventListener('mouseup', dragEnd);
-            }
-            
-            // Resetear transformación
-            element.style.transform = '';
-            
-            // Actualizar vista de firmas
-            this.renderSignaturesList();
+            document.removeEventListener('mousemove', dragMove);
+            document.removeEventListener('mouseup', dragEnd);
         };
-
-        // Agregar event listeners
-        if (isTouch) {
-            document.addEventListener('touchmove', dragMove, { passive: false });
-            document.addEventListener('touchend', dragEnd, { passive: false });
-            document.addEventListener('touchcancel', dragEnd, { passive: false });
-        } else {
-            document.addEventListener('mousemove', dragMove);
-            document.addEventListener('mouseup', dragEnd);
-        }
+        
+        document.addEventListener('mousemove', dragMove);
+        document.addEventListener('mouseup', dragEnd);
     }
 
     // ===========================================
-    // NUEVO: MÉTODO MEJORADO PARA REDIMENSIONAR
+    // NUEVO: MÉTODO MEJORADO PARA REDIMENSIONAR (MOUSE/ESCRITORIO)
     // ===========================================
     static startResize(e, element, signatureData) {
         e.preventDefault();
         e.stopPropagation();
         
-        const isTouch = e.type === 'touchstart' || e.type.startsWith('touch');
         const handle = e.target;
+        const handleType = Array.from(handle.classList).find(cls => cls.includes('handle-'));
         
-        // Obtener coordenadas iniciales
-        const startX = isTouch ? e.touches[0].clientX : e.clientX;
-        const startY = isTouch ? e.touches[0].clientY : e.clientY;
-        const startWidth = parseFloat(element.style.width);
-        const startHeight = parseFloat(element.style.height);
-        const startLeft = parseFloat(element.style.left);
-        const startTop = parseFloat(element.style.top);
-
-        // Determinar qué handle se está usando
-        const handleType = Array.from(handle.classList).find(cls => 
-            cls.includes('handle-')
-        );
-
-        // Función para redimensionar
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const startWidth = parseFloat(element.style.width) || element.offsetWidth;
+        const startHeight = parseFloat(element.style.height) || element.offsetHeight;
+        const startLeft = parseFloat(element.style.left) || 0;
+        const startTop = parseFloat(element.style.top) || 0;
+        
+        const minWidth = 50;
+        const minHeight = 30;
+        
         const resizeMove = (moveEvent) => {
-            moveEvent.preventDefault();
+            const dx = moveEvent.clientX - startX;
+            const dy = moveEvent.clientY - startY;
             
-            const currentX = isTouch ? moveEvent.touches[0].clientX : moveEvent.clientX;
-            const currentY = isTouch ? moveEvent.touches[0].clientY : moveEvent.clientY;
-            
-            const dx = currentX - startX;
-            const dy = currentY - startY;
-
             let newWidth = startWidth;
             let newHeight = startHeight;
             let newLeft = startLeft;
             let newTop = startTop;
-
-            // Tamaños mínimos (ajustados para móvil)
-            const minWidth = this.isTouchDevice ? 80 : 50;
-            const minHeight = this.isTouchDevice ? 50 : 30;
-
-            // Calcular nuevo tamaño según el handle
-            switch(handleType) {
-                case 'handle-top-left':
-                    newWidth = Math.max(minWidth, startWidth - dx);
-                    newHeight = Math.max(minHeight, startHeight - dy);
-                    newLeft = Math.max(0, startLeft + dx);
-                    newTop = Math.max(0, startTop + dy);
-                    break;
-                    
-                case 'handle-top-right':
-                    newWidth = Math.max(minWidth, startWidth + dx);
-                    newHeight = Math.max(minHeight, startHeight - dy);
-                    newTop = Math.max(0, startTop + dy);
-                    break;
-                    
-                case 'handle-bottom-left':
-                    newWidth = Math.max(minWidth, startWidth - dx);
-                    newHeight = Math.max(minHeight, startHeight + dy);
-                    newLeft = Math.max(0, startLeft + dx);
-                    break;
-                    
-                case 'handle-bottom-right':
-                    newWidth = Math.max(minWidth, startWidth + dx);
-                    newHeight = Math.max(minHeight, startHeight + dy);
-                    break;
+            
+            if (handleType?.includes('handle-right')) {
+                newWidth = Math.max(minWidth, startWidth + dx);
             }
-
-            // Asegurar que no sea demasiado grande
-            const canvas = document.getElementById('documentCanvas');
-            if (canvas) {
-                const maxWidth = canvas.clientWidth * 0.8;
-                const maxHeight = canvas.clientHeight * 0.8;
-                newWidth = Math.min(newWidth, maxWidth);
-                newHeight = Math.min(newHeight, maxHeight);
+            if (handleType?.includes('handle-left')) {
+                newWidth = Math.max(minWidth, startWidth - dx);
+                newLeft = startLeft + dx;
             }
-
-            // Aplicar cambios
+            if (handleType?.includes('handle-bottom')) {
+                newHeight = Math.max(minHeight, startHeight + dy);
+            }
+            if (handleType?.includes('handle-top')) {
+                newHeight = Math.max(minHeight, startHeight - dy);
+                newTop = startTop + dy;
+            }
+            
             element.style.width = newWidth + 'px';
             element.style.height = newHeight + 'px';
             element.style.left = newLeft + 'px';
             element.style.top = newTop + 'px';
-
-            // Actualizar datos
+            
             signatureData.width = newWidth;
             signatureData.height = newHeight;
             signatureData.x = newLeft;
             signatureData.y = newTop;
-            
-            // Forzar reflow
-            element.style.transform = 'translateZ(0)';
         };
-
-        // Función para finalizar
+        
         const resizeEnd = () => {
-            this.isResizingSignature = false;
-            
-            if (isTouch) {
-                document.removeEventListener('touchmove', resizeMove);
-                document.removeEventListener('touchend', resizeEnd);
-                document.removeEventListener('touchcancel', resizeEnd);
-            } else {
-                document.removeEventListener('mousemove', resizeMove);
-                document.removeEventListener('mouseup', resizeEnd);
-            }
-            
-            // Resetear transformación
-            element.style.transform = '';
-            
-            // Actualizar vista
-            this.renderSignaturesList();
+            document.removeEventListener('mousemove', resizeMove);
+            document.removeEventListener('mouseup', resizeEnd);
         };
-
-        // Agregar event listeners
-        if (isTouch) {
-            document.addEventListener('touchmove', resizeMove, { passive: false });
-            document.addEventListener('touchend', resizeEnd, { passive: false });
-            document.addEventListener('touchcancel', resizeEnd, { passive: false });
-        } else {
-            document.addEventListener('mousemove', resizeMove);
-            document.addEventListener('mouseup', resizeEnd);
-        }
+        
+        document.addEventListener('mousemove', resizeMove);
+        document.addEventListener('mouseup', resizeEnd);
     }
 
     static selectSignature(element) {
@@ -5823,18 +5762,23 @@ class DocumentService {
     static repositionSignaturesForZoom() {
         const canvas = document.getElementById('documentCanvas');
         if (!canvas) return;
-        
-        const originalWidth = canvas.width / this.currentZoom;
-        const originalHeight = canvas.height / this.currentZoom;
-        
+        // Usar dimensiones reales de visualización (CSS / bounding rect)
+        const displayRect = canvas.getBoundingClientRect();
+        const displayWidth = displayRect.width || parseFloat(canvas.style.width) || canvas.width;
+        const displayHeight = displayRect.height || parseFloat(canvas.style.height) || canvas.height;
+
+        // El canvas.width/height son las dimensiones en píxeles de la superficie
+        const pixelWidth = canvas.width;
+        const pixelHeight = canvas.height;
+
         this.documentSignatures.forEach(signature => {
             const signatureElement = document.querySelector(`[data-signature-id="${signature.id}"]`);
             if (signatureElement) {
-                const scaledX = (signature.x / originalWidth) * canvas.width;
-                const scaledY = (signature.y / originalHeight) * canvas.height;
-                const scaledWidth = (signature.width / originalWidth) * canvas.width;
-                const scaledHeight = (signature.height / originalHeight) * canvas.height;
-                
+                const scaledX = (signature.x / pixelWidth) * displayWidth;
+                const scaledY = (signature.y / pixelHeight) * displayHeight;
+                const scaledWidth = (signature.width / pixelWidth) * displayWidth;
+                const scaledHeight = (signature.height / pixelHeight) * displayHeight;
+
                 signatureElement.style.left = scaledX + 'px';
                 signatureElement.style.top = scaledY + 'px';
                 signatureElement.style.width = scaledWidth + 'px';
@@ -5866,10 +5810,30 @@ class DocumentService {
     static createSignatureElement(signature) {
         const signatureElement = document.createElement('div');
         signatureElement.className = 'document-signature';
-        signatureElement.style.left = signature.x + 'px';
-        signatureElement.style.top = signature.y + 'px';
-        signatureElement.style.width = signature.width + 'px';
-        signatureElement.style.height = signature.height + 'px';
+        // Calcular posición en base al tamaño mostrado del canvas
+        const canvas = document.getElementById('documentCanvas');
+        if (canvas) {
+            const rect = canvas.getBoundingClientRect();
+            const displayWidth = rect.width || parseFloat(canvas.style.width) || canvas.width;
+            const displayHeight = rect.height || parseFloat(canvas.style.height) || canvas.height;
+            const pixelWidth = canvas.width;
+            const pixelHeight = canvas.height;
+
+            const left = (signature.x / pixelWidth) * displayWidth;
+            const top = (signature.y / pixelHeight) * displayHeight;
+            const w = (signature.width / pixelWidth) * displayWidth;
+            const h = (signature.height / pixelHeight) * displayHeight;
+
+            signatureElement.style.left = left + 'px';
+            signatureElement.style.top = top + 'px';
+            signatureElement.style.width = w + 'px';
+            signatureElement.style.height = h + 'px';
+        } else {
+            signatureElement.style.left = signature.x + 'px';
+            signatureElement.style.top = signature.y + 'px';
+            signatureElement.style.width = signature.width + 'px';
+            signatureElement.style.height = signature.height + 'px';
+        }
         signatureElement.dataset.signatureId = signature.id;
         
         signatureElement.innerHTML = `
@@ -5886,23 +5850,162 @@ class DocumentService {
     }
 
     // ===========================================
-    // REEMPLAZAR: enableSignatureMode
+    // REEMPLAZAR: enableSignatureMode - MODO CLIC MEJORADO
     // ===========================================
     static enableSignatureMode() {
-        this.isSignatureMode = false; // Ya no necesitamos modo de clic
-        document.body.classList.remove('signature-mode-active'); // Quitar clase CSS
+        console.log('📋 enableSignatureMode() llamado');
+        
+        if (!this.currentSignature) {
+            console.warn('⚠️ No hay firma seleccionada');
+            showNotification('No hay firma seleccionada', 'error');
+            return;
+        }
+
+        if (!this.currentDocument) {
+            console.warn('⚠️ No hay documento seleccionado');
+            showNotification('Primero selecciona un documento', 'error');
+            return;
+        }
+
+        const canvas = document.getElementById('documentCanvas');
+        if (!canvas) {
+            console.warn('⚠️ Canvas no encontrado, usando fallback automático');
+            // Si no hay canvas, colocar firma automáticamente
+            this.addSignatureToDocument();
+            return;
+        }
+
+        console.log('✓ Canvas encontrado, activando modo de clic');
+        this.isSignatureMode = true;
+        document.body.classList.add('signature-mode-active');
+        canvas.style.cursor = 'crosshair';
+        
+        showNotification('✓ Haz clic donde deseas colocar la firma');
+        
+        // Remover handler anterior si existe
+        if (this.canvasClickHandler) {
+            canvas.removeEventListener('click', this.canvasClickHandler);
+        }
+        if (this.canvasTouchHandler) {
+            canvas.removeEventListener('touchend', this.canvasTouchHandler);
+        }
+        
+        // Handler para click en escritorio
+        this.canvasClickHandler = (e) => this.handleCanvasClickForSignature(e);
+        
+        // Handler para toque en móvil
+        this.canvasTouchHandler = (e) => this.handleCanvasTouchForSignature(e);
+        
+        canvas.addEventListener('click', this.canvasClickHandler);
+        canvas.addEventListener('touchend', this.canvasTouchHandler, { passive: false });
+        
+        // Fallback: si el usuario no hace clic en 5 segundos, colocar firma automáticamente
+        console.log('⏱️ Iniciando temporizador de 5 segundos para fallback automático');
+        this.signatureModeTimeout = setTimeout(() => {
+            if (this.isSignatureMode) {
+                console.log('⏰ Tiempo agotado, colocando firma automáticamente');
+                showNotification('⏰ Colocando firma automáticamente...');
+                
+                // Salir del modo de clic
+                this.isSignatureMode = false;
+                document.body.classList.remove('signature-mode-active');
+                canvas.style.cursor = 'default';
+                
+                // Remover listeners
+                canvas.removeEventListener('click', this.canvasClickHandler);
+                canvas.removeEventListener('touchend', this.canvasTouchHandler);
+                
+                // Colocar firma automáticamente
+                this.addSignatureToDocument();
+            }
+        }, 5000);
+    }
+
+    static handleCanvasClickForSignature(e) {
+        console.log('🖱️ Click en canvas detectado');
+        
+        if (!this.isSignatureMode || !this.currentSignature) {
+            console.warn('⚠️ No estamos en modo de firma o no hay firma seleccionada');
+            return;
+        }
         
         const canvas = document.getElementById('documentCanvas');
-        const signatureLayer = document.getElementById('signatureLayer');
+        if (!canvas) {
+            console.warn('⚠️ Canvas no encontrado');
+            return;
+        }
         
+        const rect = canvas.getBoundingClientRect();
+        
+        // Convertir coordenadas CSS a píxeles del canvas
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        
+        const x = (e.clientX - rect.left) * scaleX;
+        const y = (e.clientY - rect.top) * scaleY;
+        
+        console.log(`🎯 Clic en posición: canvas=(${Math.round(x)}, ${Math.round(y)}), CSS=(${Math.round(e.clientX - rect.left)}, ${Math.round(e.clientY - rect.top)}), escala=(${scaleX.toFixed(2)}, ${scaleY.toFixed(2)})`);
+        
+        // Limpiar el temporizador de fallback
+        if (this.signatureModeTimeout) {
+            clearTimeout(this.signatureModeTimeout);
+            console.log('✓ Temporizador de fallback cancelado');
+        }
+        
+        // Salir del modo de firma
+        this.isSignatureMode = false;
+        document.body.classList.remove('signature-mode-active');
         if (canvas) canvas.style.cursor = 'default';
-        if (signatureLayer) signatureLayer.style.pointerEvents = 'auto';
         
-        // NO agregar event listener de clic
-        this.canvasClickHandler = null;
+        // Remover listeners
+        if (canvas) {
+            canvas.removeEventListener('click', this.canvasClickHandler);
+            canvas.removeEventListener('touchend', this.canvasTouchHandler);
+        }
         
-        // Ahora colocamos la firma automáticamente
-        this.addSignatureToDocument();
+        // Colocar firma en la posición especificada
+        console.log('📍 Llamando a addSignatureToDocument con coordenadas manuales');
+        this.addSignatureToDocument(x, y);
+    }
+
+    static handleCanvasTouchForSignature(e) {
+        if (!this.isSignatureMode || !this.currentSignature) {
+            return;
+        }
+        
+        // Evitar que sea arrastrable
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const canvas = document.getElementById('documentCanvas');
+        if (!canvas) return;
+        
+        // Obtener el último toque
+        const touch = e.changedTouches[e.changedTouches.length - 1];
+        const rect = canvas.getBoundingClientRect();
+        
+        // Convertir coordenadas CSS a píxeles del canvas
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        
+        const x = (touch.clientX - rect.left) * scaleX;
+        const y = (touch.clientY - rect.top) * scaleY;
+        
+        console.log(`🎯 Toque en posición: (${Math.round(x)}, ${Math.round(y)})`);
+        
+        // Salir del modo de firma
+        this.isSignatureMode = false;
+        document.body.classList.remove('signature-mode-active');
+        if (canvas) canvas.style.cursor = 'default';
+        
+        // Remover listeners
+        if (canvas) {
+            canvas.removeEventListener('click', this.canvasClickHandler);
+            canvas.removeEventListener('touchend', this.canvasTouchHandler);
+        }
+        
+        // Colocar firma en la posición especificada
+        this.addSignatureToDocument(x, y);
     }
 
     /*
@@ -5945,9 +6048,9 @@ class DocumentService {
     }
 
     // ===========================================
-    // MODIFICAR addSignatureToDocument para mejor manejo de posición
+    // MODIFICAR addSignatureToDocument para aceptar posición manual
     // ===========================================
-    static async addSignatureToDocument() {
+    static async addSignatureToDocument(manualX = null, manualY = null) {
         if (!this.currentSignature) {
             showNotification('No hay firma seleccionada', 'error');
             return;
@@ -5959,16 +6062,27 @@ class DocumentService {
         }
 
         try {
-            console.log('🔍 BUSCANDO MEJOR UBICACIÓN PARA LA FIRMA...');
+            let position;
             
-            // Buscar posición automáticamente
-            const position = await this.findSignaturePosition();
-            
-            console.log('🎯 POSICIÓN ENCONTRADA:', position);
-            console.log(`📍 (${Math.round(position.x)}, ${Math.round(position.y)}) - ${position.fieldType} - ${position.confidence} confianza`);
+            // Si se especifica posición manual (clic/toque del usuario), usarla
+            if (manualX !== null && manualY !== null) {
+                console.log(`📍 Usando posición manual: (${Math.round(manualX)}, ${Math.round(manualY)})`);
+                position = {
+                    x: manualX,
+                    y: manualY,
+                    fieldType: 'manual_click',
+                    confidence: 1.0,
+                    reason: 'Posición seleccionada por el usuario'
+                };
+            } else {
+                // Fallback: buscar automáticamente
+                console.log('🔍 Buscando mejor ubicación para la firma...');
+                position = await this.findSignaturePosition();
+                console.log('🎯 Posición encontrada:', position);
+            }
             
             // Calcular tamaño de la firma
-            let width = 150; // Tamaño predeterminado
+            let width = 150;
             let height = 60;
             
             if (this.currentSignature.type === 'upload') {
@@ -5980,12 +6094,11 @@ class DocumentService {
                     img.onerror = reject;
                 });
                 
-                // Ajustar tamaño manteniendo proporciones
-                const maxWidth = 200;
-                const maxHeight = 80;
-                
                 width = img.naturalWidth;
                 height = img.naturalHeight;
+                
+                const maxWidth = 200;
+                const maxHeight = 80;
                 
                 if (width > maxWidth || height > maxHeight) {
                     const ratio = Math.min(maxWidth / width, maxHeight / height);
@@ -5994,10 +6107,9 @@ class DocumentService {
                 }
             }
             
-            // Asegurar que la posición esté dentro del documento
+            // Asegurar que está dentro del documento
             const canvas = document.getElementById('documentCanvas');
             if (canvas) {
-                // Ajustar para no salirse del canvas
                 if (position.x < 10) position.x = 10;
                 if (position.y < 10) position.y = 10;
                 if (position.x + width > canvas.width - 10) {
@@ -6020,7 +6132,7 @@ class DocumentService {
                 height: height,
                 timestamp: new Date(),
                 type: this.currentSignature.type,
-                placedBy: 'auto_placement',
+                placedBy: position.fieldType === 'manual_click' ? 'manual_click' : 'auto_placement',
                 confidence: position.confidence,
                 fieldType: position.fieldType,
                 reason: position.reason
@@ -6036,31 +6148,12 @@ class DocumentService {
             this.renderExistingSignatures();
             this.renderSignaturesList();
             
-            // Mostrar feedback
-            setTimeout(() => {
-                const signatureElement = document.querySelector(`[data-signature-id="${signature.id}"]`);
-                if (signatureElement) {
-                    signatureElement.classList.add('highlight-new');
-                    
-                    // Agregar indicador visual temporal
-                    const indicator = document.createElement('div');
-                    indicator.className = 'placement-indicator';
-                    indicator.innerHTML = `✓ Colocado automáticamente (${Math.round(position.confidence * 100)}% confianza)`;
-                    signatureElement.appendChild(indicator);
-                    
-                    setTimeout(() => {
-                        signatureElement.classList.remove('highlight-new');
-                        indicator.remove();
-                    }, 2000);
-                }
-            }, 100);
-            
-            // Mostrar notificación informativa
-            showNotification(`✓ Firma colocada automáticamente (${Math.round(position.confidence * 100)}% de precisión)`);
+            // Mostrar notificación
+            showNotification(`✓ Firma colocada. Puedes mover y redimensionar libremente`);
             
         } catch (error) {
             console.error('❌ Error al agregar firma:', error);
-            showNotification('Error al colocar la firma automáticamente', 'error');
+            showNotification('Error al colocar la firma', 'error');
         }
     }
 
@@ -6069,10 +6162,7 @@ class DocumentService {
     // ===========================================
     static setCurrentSignature(signatureData) {
         this.currentSignature = signatureData;
-        // Ya no activamos modo firma, llamamos directamente a enableSignatureMode
-        // que ahora agregará automáticamente la firma
         this.enableSignatureMode();
-        showNotification('Firma seleccionada - Se colocará automáticamente');
     }
 
     static clearAllSignatures() {
@@ -6501,6 +6591,691 @@ class DocumentExportService {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+    }
+}
+
+// ===========================================
+// ALGORITMO INTELIGENTE DE DETECCIÓN DE CAMPOS DE FIRMA
+// ===========================================
+class SignatureFieldDetector {
+    static async detectAllSignatureFields(canvas) {
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        
+        console.log('🔍 INICIANDO ANÁLISIS COMPLETO DEL DOCUMENTO PARA CAMPOS DE FIRMA...');
+        
+        const allFields = [];
+        
+        // 1. BUSCAR LÍNEAS DE FIRMA EN TODO EL DOCUMENTO
+        console.log('📏 Buscando líneas de firma...');
+        const signatureLines = await this.findSignatureLinesComplete(ctx, width, height);
+        allFields.push(...signatureLines);
+        
+        // 2. BUSCAR TEXTOS QUE INDIQUEN CAMPOS DE FIRMA
+        console.log('🔤 Buscando indicadores de texto...');
+        const textFields = await this.findTextIndicators(ctx, width, height);
+        allFields.push(...textFields);
+        
+        // 3. BUSCAR CUADROS/TABLAS DE FIRMA
+        console.log('📋 Buscando cuadros y tablas...');
+        const boxFields = await this.findSignatureBoxes(ctx, width, height);
+        allFields.push(...boxFields);
+        
+        // 4. BUSCAR ESPACIOS VACÍOS ESTRUCTURALES
+        console.log('🏗️ Buscando espacios estructurales...');
+        const structuralFields = await this.findStructuralFields(ctx, width, height);
+        allFields.push(...structuralFields);
+        
+        // 5. ORDENAR CAMPOS POR RELEVANCIA
+        const sortedFields = this.sortFieldsByRelevance(allFields, width, height);
+        
+        console.log(`✅ ${sortedFields.length} campos de firma detectados`);
+        
+        return sortedFields;
+    }
+    
+    // ===========================================
+    // MÉTODO 1: BUSCAR LÍNEAS DE FIRMA COMPLETAS
+    // ===========================================
+    static async findSignatureLinesComplete(ctx, width, height) {
+        const lines = [];
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const data = imageData.data;
+        
+        // Escanear todo el documento con pasos más pequeños
+        for (let y = 0; y < height; y += 3) {
+            let consecutiveDark = 0;
+            let lineStartX = 0;
+            
+            for (let x = 0; x < width; x++) {
+                const pixelIndex = (y * width + x) * 4;
+                const r = data[pixelIndex];
+                const g = data[pixelIndex + 1];
+                const b = data[pixelIndex + 2];
+                const brightness = (r + g + b) / 3;
+                
+                if (brightness < 100) { // Pixel oscuro
+                    if (consecutiveDark === 0) {
+                        lineStartX = x;
+                    }
+                    consecutiveDark++;
+                } else {
+                    // Si encontramos una línea de longitud adecuada
+                    if (consecutiveDark >= 80 && consecutiveDark <= 400) {
+                        // Verificar que sea una línea horizontal (no texto)
+                        const isHorizontalLine = this.verifyHorizontalLine(ctx, lineStartX, y, consecutiveDark);
+                        
+                        if (isHorizontalLine) {
+                            // Buscar espacio arriba para firmar
+                            const spaceAbove = this.findSpaceAboveLine(ctx, lineStartX, y, consecutiveDark, 70);
+                            
+                            if (spaceAbove) {
+                                lines.push({
+                                    type: 'signature_line',
+                                    x: spaceAbove.x,
+                                    y: spaceAbove.y,
+                                    width: 150,
+                                    height: 60,
+                                    confidence: 0.95,
+                                    priority: 1,
+                                    reason: `Línea de firma encontrada (${consecutiveDark}px)`,
+                                    lineY: y,
+                                    lineLength: consecutiveDark
+                                });
+                            }
+                        }
+                    }
+                    consecutiveDark = 0;
+                }
+            }
+            
+            // Verificar al final de la línea
+            if (consecutiveDark >= 80 && consecutiveDark <= 400) {
+                const isHorizontalLine = this.verifyHorizontalLine(ctx, lineStartX, y, consecutiveDark);
+                if (isHorizontalLine) {
+                    const spaceAbove = this.findSpaceAboveLine(ctx, lineStartX, y, consecutiveDark, 70);
+                    if (spaceAbove) {
+                        lines.push({
+                            type: 'signature_line',
+                            x: spaceAbove.x,
+                            y: spaceAbove.y,
+                            width: 150,
+                            height: 60,
+                            confidence: 0.95,
+                            priority: 1,
+                            reason: `Línea de firma encontrada (${consecutiveDark}px)`,
+                            lineY: y,
+                            lineLength: consecutiveDark
+                        });
+                    }
+                }
+            }
+        }
+        
+        return lines;
+    }
+    
+    // ===========================================
+    // MÉTODO 2: BUSCAR INDICADORES DE TEXTO
+    // ===========================================
+    static async findTextIndicators(ctx, width, height) {
+        const fields = [];
+        
+        // Palabras clave comunes en documentos colombianos
+        const keywords = [
+            'firma', 'firma:', 'firmar', 'firmado',
+            'nombre', 'nombre:', 'nombres',
+            'apellido', 'apellidos',
+            'c.c.', 'cedula', 'documento',
+            'recibido', 'entregado', 'revisado',
+            'aprobado', 'conforme', 'acepto'
+        ];
+        
+        // Dividir documento en celdas para análisis
+        const cellSize = 80;
+        const cols = Math.ceil(width / cellSize);
+        const rows = Math.ceil(height / cellSize);
+        
+        for (let row = 0; row < rows; row++) {
+            for (let col = 0; col < cols; col++) {
+                const x = col * cellSize;
+                const y = row * cellSize;
+                
+                // Verificar si esta celda tiene texto denso (probablemente una etiqueta)
+                const hasDenseText = this.hasDenseText(ctx, x, y, cellSize, cellSize);
+                
+                if (hasDenseText) {
+                    // Buscar espacio debajo o al lado derecho para firma
+                    const spaceRight = this.findSpaceToRight(ctx, x, y, cellSize, 200, 60);
+                    const spaceBelow = this.findSpaceBelow(ctx, x, y, cellSize, 150, 60);
+                    
+                    if (spaceRight) {
+                        fields.push({
+                            type: 'text_indicator_right',
+                            x: spaceRight.x,
+                            y: spaceRight.y,
+                            width: 150,
+                            height: 60,
+                            confidence: 0.85,
+                            priority: 2,
+                            reason: 'Espacio al lado de texto indicativo'
+                        });
+                    }
+                    
+                    if (spaceBelow) {
+                        fields.push({
+                            type: 'text_indicator_below',
+                            x: spaceBelow.x,
+                            y: spaceBelow.y,
+                            width: 150,
+                            height: 60,
+                            confidence: 0.80,
+                            priority: 3,
+                            reason: 'Espacio debajo de texto indicativo'
+                        });
+                    }
+                }
+            }
+        }
+        
+        return fields;
+    }
+    
+    // ===========================================
+    // MÉTODO 3: BUSCAR CUADROS DE FIRMA
+    // ===========================================
+    static async findSignatureBoxes(ctx, width, height) {
+        const boxes = [];
+        
+        // Buscar en zonas comunes para formularios
+        const commonAreas = [
+            { x: width * 0.1, y: height * 0.8, w: 180, h: 60, name: 'bottom_left_box' },
+            { x: width * 0.7, y: height * 0.8, w: 180, h: 60, name: 'bottom_right_box' },
+            { x: width * 0.4, y: height * 0.5, w: 180, h: 60, name: 'middle_box' },
+            { x: width * 0.1, y: height * 0.3, w: 180, h: 60, name: 'top_left_box' },
+            { x: width * 0.7, y: height * 0.3, w: 180, h: 60, name: 'top_right_box' }
+        ];
+        
+        for (const area of commonAreas) {
+            // Verificar si el área está vacía y tiene bordes
+            const isEmpty = this.isAreaEmpty(ctx, area.x, area.y, area.w, area.h, 0.9);
+            const hasBorders = this.hasBoxBorders(ctx, area.x, area.y, area.w, area.h);
+            
+            if (isEmpty && hasBorders) {
+                boxes.push({
+                    type: 'signature_box',
+                    x: area.x + 10,
+                    y: area.y + 10,
+                    width: area.w - 20,
+                    height: area.h - 20,
+                    confidence: 0.90,
+                    priority: 1,
+                    reason: `Cuadro de firma detectado en ${area.name}`
+                });
+            }
+        }
+        
+        return boxes;
+    }
+    
+    // ===========================================
+    // MÉTODO 4: BUSCAR CAMPOS ESTRUCTURALES
+    // ===========================================
+    static async findStructuralFields(ctx, width, height) {
+        const fields = [];
+        
+        // Analizar estructura del documento basado en su formato
+        const aspectRatio = width / height;
+        
+        if (aspectRatio > 1.3) { // Documento horizontal
+            // Formularios horizontales suelen tener firmas alineadas en la parte inferior
+            const horizontalSpots = [
+                { x: width * 0.1, y: height * 0.85, w: 200, h: 60 },
+                { x: width * 0.4, y: height * 0.85, w: 200, h: 60 },
+                { x: width * 0.7, y: height * 0.85, w: 200, h: 60 }
+            ];
+            
+            for (const spot of horizontalSpots) {
+                if (this.isAreaEmpty(ctx, spot.x, spot.y, spot.w, spot.h, 0.85)) {
+                    fields.push({
+                        type: 'structural_horizontal',
+                        x: spot.x + 10,
+                        y: spot.y + 10,
+                        width: spot.w - 20,
+                        height: spot.h - 20,
+                        confidence: 0.75,
+                        priority: 4,
+                        reason: 'Campo estructural en documento horizontal'
+                    });
+                }
+            }
+        } else { // Documento vertical
+            // Formularios verticales suelen tener firmas en el lado derecho
+            const verticalSpots = [
+                { x: width * 0.65, y: height * 0.7, w: 180, h: 60 },
+                { x: width * 0.65, y: height * 0.8, w: 180, h: 60 },
+                { x: width * 0.15, y: height * 0.8, w: 180, h: 60 }
+            ];
+            
+            for (const spot of verticalSpots) {
+                if (this.isAreaEmpty(ctx, spot.x, spot.y, spot.w, spot.h, 0.85)) {
+                    fields.push({
+                        type: 'structural_vertical',
+                        x: spot.x + 10,
+                        y: spot.y + 10,
+                        width: spot.w - 20,
+                        height: spot.h - 20,
+                        confidence: 0.75,
+                        priority: 4,
+                        reason: 'Campo estructural en documento vertical'
+                    });
+                }
+            }
+        }
+        
+        return fields;
+    }
+    
+    // ===========================================
+    // MÉTODOS AUXILIARES
+    // ===========================================
+    static verifyHorizontalLine(ctx, startX, y, length) {
+        // Verificar que sea una línea continua (no texto discontinuo)
+        const samplePoints = Math.min(10, Math.floor(length / 10));
+        let solidCount = 0;
+        
+        for (let i = 0; i < samplePoints; i++) {
+            const x = startX + Math.floor((i / samplePoints) * length);
+            
+            // Verificar varios píxeles arriba y abajo
+            let columnHasLine = false;
+            for (let dy = -3; dy <= 3; dy++) {
+                try {
+                    const pixel = ctx.getImageData(x, y + dy, 1, 1).data;
+                    const brightness = (pixel[0] + pixel[1] + pixel[2]) / 3;
+                    
+                    if (brightness < 100) {
+                        columnHasLine = true;
+                        break;
+                    }
+                } catch (e) {
+                    // Ignorar errores de límites
+                }
+            }
+            
+            if (columnHasLine) solidCount++;
+        }
+        
+        return solidCount >= samplePoints * 0.7;
+    }
+    
+    static findSpaceAboveLine(ctx, lineX, lineY, lineLength, maxHeight) {
+        const searchHeight = Math.min(maxHeight, lineY);
+        
+        for (let y = lineY - 1; y >= lineY - searchHeight; y--) {
+            let hasContent = false;
+            
+            // Verificar si esta línea tiene contenido
+            for (let x = lineX; x < lineX + lineLength; x += 5) {
+                try {
+                    const pixel = ctx.getImageData(x, y, 1, 1).data;
+                    const brightness = (pixel[0] + pixel[1] + pixel[2]) / 3;
+                    
+                    if (brightness < 200) {
+                        hasContent = true;
+                        break;
+                    }
+                } catch (e) {
+                    // Ignorar errores
+                }
+            }
+            
+            if (hasContent) {
+                // Encontramos contenido, usar espacio justo encima
+                const spaceY = y + 8;
+                return {
+                    x: lineX + (lineLength / 2) - 75,
+                    y: Math.max(10, spaceY)
+                };
+            }
+        }
+        
+        // Si no encontramos contenido, usar espacio cerca de la línea
+        return {
+            x: lineX + (lineLength / 2) - 75,
+            y: Math.max(10, lineY - 30)
+        };
+    }
+    
+    static hasDenseText(ctx, x, y, width, height) {
+        let darkPixels = 0;
+        let totalPixels = 0;
+        
+        for (let dy = 0; dy < height; dy += 2) {
+            for (let dx = 0; dx < width; dx += 2) {
+                try {
+                    const pixel = ctx.getImageData(x + dx, y + dy, 1, 1).data;
+                    const brightness = (pixel[0] + pixel[1] + pixel[2]) / 3;
+                    
+                    if (brightness < 150) {
+                        darkPixels++;
+                    }
+                    totalPixels++;
+                } catch (e) {
+                    // Ignorar errores
+                }
+            }
+        }
+        
+        return totalPixels > 20 && (darkPixels / totalPixels) > 0.3;
+    }
+    
+    static findSpaceToRight(ctx, textX, textY, textWidth, maxWidth, maxHeight) {
+        const startX = textX + textWidth + 20;
+        const endX = Math.min(startX + maxWidth, ctx.canvas.width);
+        
+        for (let x = startX; x < endX - 150; x += 10) {
+            for (let y = textY; y < textY + 50; y += 10) {
+                if (this.isAreaEmpty(ctx, x, y, 150, 60, 0.9)) {
+                    return { x: x + 5, y: y + 5 };
+                }
+            }
+        }
+        
+        return null;
+    }
+    
+    static findSpaceBelow(ctx, textX, textY, textWidth, maxWidth, maxHeight) {
+        const startY = textY + 50;
+        const endY = Math.min(startY + maxHeight, ctx.canvas.height);
+        
+        for (let y = startY; y < endY - 60; y += 10) {
+            for (let x = textX; x < textX + textWidth; x += 10) {
+                if (this.isAreaEmpty(ctx, x, y, 150, 60, 0.9)) {
+                    return { x: x + 5, y: y + 5 };
+                }
+            }
+        }
+        
+        return null;
+    }
+    
+    static hasBoxBorders(ctx, x, y, width, height) {
+        // Verificar bordes superior e inferior
+        let topBorder = 0, bottomBorder = 0, leftBorder = 0, rightBorder = 0;
+        const samplePoints = 10;
+        
+        // Borde superior
+        for (let i = 0; i < samplePoints; i++) {
+            const sampleX = x + (i / samplePoints) * width;
+            const pixel = ctx.getImageData(sampleX, y, 1, 1).data;
+            const brightness = (pixel[0] + pixel[1] + pixel[2]) / 3;
+            if (brightness < 150) topBorder++;
+        }
+        
+        // Borde inferior
+        for (let i = 0; i < samplePoints; i++) {
+            const sampleX = x + (i / samplePoints) * width;
+            const pixel = ctx.getImageData(sampleX, y + height, 1, 1).data;
+            const brightness = (pixel[0] + pixel[1] + pixel[2]) / 3;
+            if (brightness < 150) bottomBorder++;
+        }
+        
+        // Borde izquierdo
+        for (let i = 0; i < samplePoints; i++) {
+            const sampleY = y + (i / samplePoints) * height;
+            const pixel = ctx.getImageData(x, sampleY, 1, 1).data;
+            const brightness = (pixel[0] + pixel[1] + pixel[2]) / 3;
+            if (brightness < 150) leftBorder++;
+        }
+        
+        // Borde derecho
+        for (let i = 0; i < samplePoints; i++) {
+            const sampleY = y + (i / samplePoints) * height;
+            const pixel = ctx.getImageData(x + width, sampleY, 1, 1).data;
+            const brightness = (pixel[0] + pixel[1] + pixel[2]) / 3;
+            if (brightness < 150) rightBorder++;
+        }
+        
+        // Necesitamos al menos 2 bordes para considerar que es un cuadro
+        const borderCount = [topBorder, bottomBorder, leftBorder, rightBorder]
+            .filter(count => count > 5).length;
+        
+        return borderCount >= 2;
+    }
+    
+    static isAreaEmpty(ctx, x, y, width, height, threshold = 0.85) {
+        try {
+            if (x < 0 || y < 0 || x + width > ctx.canvas.width || y + height > ctx.canvas.height) {
+                return false;
+            }
+            
+            let whitePixels = 0;
+            let totalPixels = 0;
+            const sampleStep = 3;
+            
+            for (let sy = y; sy < y + height; sy += sampleStep) {
+                for (let sx = x; sx < x + width; sx += sampleStep) {
+                    const pixel = ctx.getImageData(sx, sy, 1, 1).data;
+                    const brightness = (pixel[0] + pixel[1] + pixel[2]) / 3;
+                    
+                    if (brightness > 220) {
+                        whitePixels++;
+                    }
+                    totalPixels++;
+                }
+            }
+            
+            return totalPixels > 0 && (whitePixels / totalPixels) >= threshold;
+            
+        } catch (error) {
+            return false;
+        }
+    }
+    
+    // ===========================================
+    // ORDENAR CAMPOS POR RELEVANCIA
+    // ===========================================
+    static sortFieldsByRelevance(fields, width, height) {
+        return fields.sort((a, b) => {
+            // Primero por prioridad (menor número = mayor prioridad)
+            if (a.priority !== b.priority) {
+                return a.priority - b.priority;
+            }
+            
+            // Luego por confianza
+            if (b.confidence !== a.confidence) {
+                return b.confidence - a.confidence;
+            }
+            
+            // Preferir campos en la parte inferior (más comunes para firmas)
+            const aDistanceFromBottom = height - (a.y + a.height);
+            const bDistanceFromBottom = height - (b.y + b.height);
+            
+            return aDistanceFromBottom - bDistanceFromBottom;
+        });
+    }
+    
+    // ===========================================
+    // FILTRAR CAMPOS OCUPADOS Y BUSCAR ALTERNATIVAS
+    // ===========================================
+    static findAvailableSignatureField(canvas, existingSignatures) {
+        return new Promise(async (resolve) => {
+            try {
+                // Detectar todos los campos posibles
+                const allFields = await this.detectAllSignatureFields(canvas);
+                
+                if (allFields.length === 0) {
+                    // Si no hay campos detectados, usar posición por defecto
+                    const defaultPos = this.getDefaultPosition(canvas.width, canvas.height);
+                    resolve({
+                        ...defaultPos,
+                        fieldType: 'default_fallback',
+                        confidence: 0.1,
+                        reason: 'No se detectaron campos de firma'
+                    });
+                    return;
+                }
+                
+                // Filtrar campos que no estén ocupados por firmas existentes
+                const availableFields = this.filterOccupiedFields(allFields, existingSignatures);
+                
+                // Si hay campos disponibles, usar el mejor
+                if (availableFields.length > 0) {
+                    const bestField = availableFields[0];
+                    console.log(`✅ Campo de firma disponible encontrado: ${bestField.type} (${bestField.confidence} confianza)`);
+                    resolve(bestField);
+                    return;
+                }
+                
+                // Si todos los campos están ocupados, buscar espacio cerca de campos existentes
+                console.log('⚠️ Todos los campos están ocupados, buscando espacio cercano...');
+                const nearField = this.findSpaceNearOccupiedField(canvas, allFields[0], existingSignatures);
+                
+                if (nearField) {
+                    resolve(nearField);
+                    return;
+                }
+                
+                // Último recurso: posición por defecto
+                const defaultPos = this.getDefaultPosition(canvas.width, canvas.height);
+                resolve({
+                    ...defaultPos,
+                    fieldType: 'all_occupied_fallback',
+                    confidence: 0.05,
+                    reason: 'Todos los campos ocupados, sin espacio cercano disponible'
+                });
+                
+            } catch (error) {
+                console.error('Error en findAvailableSignatureField:', error);
+                const defaultPos = this.getDefaultPosition(canvas.width, canvas.height);
+                resolve({
+                    ...defaultPos,
+                    fieldType: 'error_fallback',
+                    confidence: 0.01,
+                    reason: 'Error en detección: ' + error.message
+                });
+            }
+        });
+    }
+    
+    static filterOccupiedFields(fields, existingSignatures) {
+        if (!existingSignatures || existingSignatures.length === 0) {
+            return fields;
+        }
+        
+        return fields.filter(field => {
+            for (const sig of existingSignatures) {
+                const sigX = sig.x;
+                const sigY = sig.y;
+                const sigWidth = sig.width || 150;
+                const sigHeight = sig.height || 60;
+                
+                // Verificar superposición
+                const overlap = !(
+                    field.x + field.width < sigX ||
+                    field.x > sigX + sigWidth ||
+                    field.y + field.height < sigY ||
+                    field.y > sigY + sigHeight
+                );
+                
+                if (overlap) {
+                    return false; // Campo ocupado
+                }
+            }
+            return true; // Campo disponible
+        });
+    }
+    
+    static findSpaceNearOccupiedField(canvas, referenceField, existingSignatures) {
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        
+        // Intentar posiciones alrededor del campo de referencia
+        const searchPositions = [
+            // Derecha
+            { x: referenceField.x + referenceField.width + 20, y: referenceField.y },
+            // Abajo
+            { x: referenceField.x, y: referenceField.y + referenceField.height + 20 },
+            // Izquierda (si hay espacio)
+            { x: referenceField.x - referenceField.width - 20, y: referenceField.y },
+            // Arriba (si hay espacio)
+            { x: referenceField.x, y: referenceField.y - referenceField.height - 20 },
+            // Diagonal inferior derecha
+            { x: referenceField.x + referenceField.width + 20, y: referenceField.y + referenceField.height + 20 }
+        ];
+        
+        for (const pos of searchPositions) {
+            // Verificar que esté dentro del canvas
+            if (pos.x >= 0 && pos.y >= 0 && 
+                pos.x + referenceField.width <= width && 
+                pos.y + referenceField.height <= height) {
+                
+                // Verificar que el área esté vacía
+                if (this.isAreaEmpty(ctx, pos.x, pos.y, referenceField.width, referenceField.height, 0.8)) {
+                    
+                    // Verificar que no esté ocupado por otras firmas
+                    let isOccupied = false;
+                    for (const sig of existingSignatures) {
+                        const sigX = sig.x;
+                        const sigY = sig.y;
+                        const sigWidth = sig.width || 150;
+                        const sigHeight = sig.height || 60;
+                        
+                        const overlap = !(
+                            pos.x + referenceField.width < sigX ||
+                            pos.x > sigX + sigWidth ||
+                            pos.y + referenceField.height < sigY ||
+                            pos.y > sigY + sigHeight
+                        );
+                        
+                        if (overlap) {
+                            isOccupied = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!isOccupied) {
+                        console.log(`✅ Espacio cercano encontrado en (${pos.x}, ${pos.y})`);
+                        return {
+                            ...referenceField,
+                            x: pos.x,
+                            y: pos.y,
+                            fieldType: `near_${referenceField.type}`,
+                            confidence: referenceField.confidence * 0.7,
+                            reason: `Espacio cerca de campo ${referenceField.type} ocupado`
+                        };
+                    }
+                }
+            }
+        }
+        
+        return null;
+    }
+    
+    static getDefaultPosition(width, height) {
+        // Posición por defecto basada en el tipo de documento
+        const aspectRatio = width / height;
+        
+        if (aspectRatio > 1.3) {
+            // Horizontal
+            return {
+                x: width * 0.75 - 75,
+                y: height * 0.85 - 30,
+                width: 150,
+                height: 60
+            };
+        } else {
+            // Vertical
+            return {
+                x: width * 0.65 - 75,
+                y: height * 0.88 - 30,
+                width: 150,
+                height: 60
+            };
+        }
     }
 }
 
