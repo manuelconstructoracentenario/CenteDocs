@@ -1762,6 +1762,7 @@ class SignatureGenerator {
 class DocumentService {
     static currentDocument = null;
     static currentZoom = 1.0;
+    static highQualityMode = false;
     static isSignatureMode = false;
     static currentSignature = null;
     static documentSignatures = [];
@@ -5283,22 +5284,33 @@ class DocumentService {
         if (!viewerContent) {
             return { width: originalWidth, height: originalHeight };
         }
-        
-        const containerWidth = viewerContent.clientWidth - 80;
-        const containerHeight = viewerContent.clientHeight - 80;
+        const containerWidth = viewerContent.clientWidth - 40;
+        const containerHeight = viewerContent.clientHeight - 40;
         
         let width = originalWidth;
         let height = originalHeight;
         
         const scaleX = containerWidth / originalWidth;
         const scaleY = containerHeight / originalHeight;
-        const scale = Math.min(scaleX, scaleY, 1.5) * qualityMultiplier;
-        
+        // Determine a reasonable base scale that fits the container
+        const scaleFit = Math.min(scaleX, scaleY);
+
+        // More flexible limits for zoom and render quality
+        const minScale = 0.5;
+        const maxScale = 4.0;
+
+        let scale = Math.min(Math.max(scaleFit, minScale), maxScale) * qualityMultiplier;
+        // Compensate for small viewports / mobile
+        const isMobile = window.innerWidth <= 768;
+        if (isMobile) {
+            scale *= 1.2;
+        }
+
         const minWidth = 600;
         const minHeight = 400;
-        
-        width = Math.max(originalWidth * scale, minWidth);
-        height = Math.max(originalHeight * scale, minHeight);
+
+        width = Math.max(Math.round(originalWidth * scale), minWidth);
+        height = Math.max(Math.round(originalHeight * scale), minHeight);
         
         return { 
             width: Math.round(width), 
@@ -5544,15 +5556,54 @@ class DocumentService {
             const originalWidth = viewport.width;
             const originalHeight = viewport.height;
 
-            const optimalSize = this.calculateOptimalDocumentSize(originalWidth, originalHeight, 1.5);
+            // Base quality multiplier and adjustments
+            let qualityMultiplier = 1.5;
+            const isMobile = window.innerWidth <= 768;
+            const isHighDensity = (window.devicePixelRatio || 1) > 1;
 
-            canvas.width = optimalSize.width;
-            canvas.height = optimalSize.height;
+            if (isMobile) qualityMultiplier = 2.5;
+            if (isHighDensity) qualityMultiplier *= window.devicePixelRatio || 1;
+            // Consider current zoom
+            qualityMultiplier *= Math.max(1, this.currentZoom || 1);
+            // If high quality mode is toggled, boost the multiplier
+            if (this.highQualityMode) {
+                qualityMultiplier = Math.max(qualityMultiplier, 3.0);
+            }
 
+            const dpr = window.devicePixelRatio || 1;
+
+            const optimalSize = this.calculateOptimalDocumentSize(originalWidth, originalHeight, qualityMultiplier);
+
+            // Determine effective scale and clamp canvas size to avoid OOM
+            const MAX_CANVAS_SIDE = 16384; // safe guard for most browsers
+            let effectiveScale = optimalSize.scale;
+            let minRenderWidth = Math.round(originalWidth * effectiveScale * dpr);
+            let minRenderHeight = Math.round(originalHeight * effectiveScale * dpr);
+            if (minRenderWidth > MAX_CANVAS_SIDE || minRenderHeight > MAX_CANVAS_SIDE) {
+                const scaleFactor = Math.min(MAX_CANVAS_SIDE / minRenderWidth, MAX_CANVAS_SIDE / minRenderHeight);
+                effectiveScale = effectiveScale * scaleFactor;
+            }
+
+            // Physical pixel size for canvas surface
+            const renderWidth = Math.round(originalWidth * (effectiveScale) * dpr);
+            const renderHeight = Math.round(originalHeight * (effectiveScale) * dpr);
+
+            // Visual (CSS) size
+            const displayWidth = Math.round(originalWidth * (effectiveScale));
+            const displayHeight = Math.round(originalHeight * (effectiveScale));
+
+            // Setup canvas for high DPI
+            canvas.width = renderWidth;
+            canvas.height = renderHeight;
+            canvas.style.width = displayWidth + 'px';
+            canvas.style.height = displayHeight + 'px';
+
+            // Prepare context: scale drawing operations for DPR
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
 
-            const optimalViewport = page.getViewport({ scale: optimalSize.scale });
+            let optimalViewport = page.getViewport({ scale: effectiveScale });
 
             const renderContext = {
                 canvasContext: ctx,
@@ -5568,10 +5619,17 @@ class DocumentService {
                 console.warn('Error cancelando render anterior:', cancelErr);
             }
 
-            const renderTask = page.render(renderContext);
+            const renderTask = page.render({
+                ...renderContext,
+                intent: (this.highQualityMode ? 'print' : 'display'),
+                enableWebGL: true,
+                renderInteractiveForms: false
+            });
             this.lastRenderTask = renderTask;
             await renderTask.promise;
             this.lastRenderTask = null;
+            // Restore transform to identity for other canvas operations
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
 
         } catch (error) {
             console.error('Error al renderizar PDF:', error);
@@ -5745,13 +5803,65 @@ class DocumentService {
     }
 
     static zoomIn() {
-        this.currentZoom = Math.min(this.currentZoom + 0.25, 3.0);
+        const oldZoom = this.currentZoom;
+        this.currentZoom = Math.min(this.currentZoom + 0.25, 5.0);
+
+        // If the zoom crosses a threshold, re-render at higher quality
+        if (this.currentZoom > 2.0 && oldZoom <= 2.0) {
+            if (this.currentDocument && this.currentDocument.type === 'application/pdf') {
+                showNotification('Optimizando calidad para zoom...');
+                this.highQualityMode = true;
+                setTimeout(() => this.renderDocument(), 100);
+            }
+        }
         this.applyRealZoom();
     }
 
     static zoomOut() {
-        this.currentZoom = Math.max(this.currentZoom - 0.25, 0.5);
+        const oldZoom = this.currentZoom;
+        this.currentZoom = Math.max(this.currentZoom - 0.25, 0.25);
+
+        // If we drop below performance threshold, re-render at lower quality for speed
+        if (this.currentZoom < 1.5 && oldZoom >= 1.5) {
+            if (this.currentDocument && this.currentDocument.type === 'application/pdf') {
+                this.highQualityMode = false;
+                setTimeout(() => this.renderDocument(), 100);
+            }
+        }
+
         this.applyRealZoom();
+    }
+
+    static toggleQuality() {
+        this.highQualityMode = !this.highQualityMode;
+        if (this.highQualityMode) {
+            showNotification('Modo alta calidad activado');
+            if (this.currentDocument && this.currentDocument.type === 'application/pdf') {
+                this.renderDocument();
+            }
+        } else {
+            showNotification('Modo estándar activado');
+        }
+        return this.highQualityMode;
+    }
+
+    static async renderHighQuality(force = false) {
+        if (!this.currentDocument || this.currentDocument.type !== 'application/pdf') return;
+
+        const canvas = document.getElementById('documentCanvas');
+        const ctx = canvas ? canvas.getContext('2d') : null;
+        if (!canvas || !ctx) return;
+
+        if (force) this.highQualityMode = true;
+
+        showNotification('Cargando en alta calidad...');
+        try {
+            await this.renderPDFDocument(canvas, ctx);
+            this.renderExistingSignatures();
+            showNotification('Calidad optimizada ✓');
+        } catch (err) {
+            console.error('Error en renderizado de alta calidad:', err);
+        }
     }
 
     static applyRealZoom() {
@@ -8180,6 +8290,13 @@ document.addEventListener('DOMContentLoaded', function() {
             DocumentService.zoomOut();
         });
     }
+    // NUEVO: Botón de alta calidad
+    const highQualityBtn = document.getElementById('highQualityBtn');
+    if (highQualityBtn) {
+        highQualityBtn.addEventListener('click', function() {
+            DocumentService.renderHighQuality(true);
+        });
+    }
     
     const viewerContent = document.getElementById('viewerContent');
     if (viewerContent) {
@@ -8242,6 +8359,15 @@ document.addEventListener('DOMContentLoaded', function() {
         
         viewerContent.addEventListener('touchend', () => {
             initialDistance = null;
+            // Si el zoom es alto, activar calidad HD automáticamente
+            if (DocumentService.currentZoom > 2.0 && !DocumentService.highQualityMode) {
+                DocumentService.highQualityMode = true;
+                setTimeout(() => {
+                    if (DocumentService.currentDocument && DocumentService.currentDocument.type === 'application/pdf') {
+                        DocumentService.renderDocument();
+                    }
+                }, 500);
+            }
         });
     }
     
