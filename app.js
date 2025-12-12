@@ -5574,23 +5574,13 @@ class DocumentService {
 
             const optimalSize = this.calculateOptimalDocumentSize(originalWidth, originalHeight, qualityMultiplier);
 
-            // Determine effective scale and clamp canvas size to avoid OOM
-            const MAX_CANVAS_SIDE = 16384; // safe guard for most browsers
-            let effectiveScale = optimalSize.scale;
-            let minRenderWidth = Math.round(originalWidth * effectiveScale * dpr);
-            let minRenderHeight = Math.round(originalHeight * effectiveScale * dpr);
-            if (minRenderWidth > MAX_CANVAS_SIDE || minRenderHeight > MAX_CANVAS_SIDE) {
-                const scaleFactor = Math.min(MAX_CANVAS_SIDE / minRenderWidth, MAX_CANVAS_SIDE / minRenderHeight);
-                effectiveScale = effectiveScale * scaleFactor;
-            }
-
             // Physical pixel size for canvas surface
-            const renderWidth = Math.round(originalWidth * (effectiveScale) * dpr);
-            const renderHeight = Math.round(originalHeight * (effectiveScale) * dpr);
+            const renderWidth = Math.round(originalWidth * (optimalSize.scale) * dpr);
+            const renderHeight = Math.round(originalHeight * (optimalSize.scale) * dpr);
 
             // Visual (CSS) size
-            const displayWidth = Math.round(originalWidth * (effectiveScale));
-            const displayHeight = Math.round(originalHeight * (effectiveScale));
+            const displayWidth = Math.round(originalWidth * (optimalSize.scale));
+            const displayHeight = Math.round(originalHeight * (optimalSize.scale));
 
             // Setup canvas for high DPI
             canvas.width = renderWidth;
@@ -5603,7 +5593,7 @@ class DocumentService {
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
 
-            let optimalViewport = page.getViewport({ scale: effectiveScale });
+            const optimalViewport = page.getViewport({ scale: optimalSize.scale });
 
             const renderContext = {
                 canvasContext: ctx,
@@ -5810,7 +5800,6 @@ class DocumentService {
         if (this.currentZoom > 2.0 && oldZoom <= 2.0) {
             if (this.currentDocument && this.currentDocument.type === 'application/pdf') {
                 showNotification('Optimizando calidad para zoom...');
-                this.highQualityMode = true;
                 setTimeout(() => this.renderDocument(), 100);
             }
         }
@@ -5824,7 +5813,6 @@ class DocumentService {
         // If we drop below performance threshold, re-render at lower quality for speed
         if (this.currentZoom < 1.5 && oldZoom >= 1.5) {
             if (this.currentDocument && this.currentDocument.type === 'application/pdf') {
-                this.highQualityMode = false;
                 setTimeout(() => this.renderDocument(), 100);
             }
         }
@@ -8359,15 +8347,6 @@ document.addEventListener('DOMContentLoaded', function() {
         
         viewerContent.addEventListener('touchend', () => {
             initialDistance = null;
-            // Si el zoom es alto, activar calidad HD automáticamente
-            if (DocumentService.currentZoom > 2.0 && !DocumentService.highQualityMode) {
-                DocumentService.highQualityMode = true;
-                setTimeout(() => {
-                    if (DocumentService.currentDocument && DocumentService.currentDocument.type === 'application/pdf') {
-                        DocumentService.renderDocument();
-                    }
-                }, 500);
-            }
         });
     }
     

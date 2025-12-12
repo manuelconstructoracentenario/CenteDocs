@@ -2494,26 +2494,6 @@
         max-height: none !important;
     }
 
-    @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
-        #documentCanvas {
-            image-rendering: auto;
-        }
-    }
-
-    .loading-hq {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: rgba(47, 108, 70, 0.9);
-        color: white;
-        padding: 10px 20px;
-        border-radius: 20px;
-        z-index: 1000;
-        font-size: 14px;
-        animation: pulse 1.5s infinite;
-    }
-
     .signature-layer {
         position: absolute;
         top: 0;
