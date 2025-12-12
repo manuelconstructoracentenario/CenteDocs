@@ -5057,9 +5057,32 @@ class DocumentService {
             
             element.style.left = newLeft + 'px';
             element.style.top = newTop + 'px';
-            
-            signatureData.x = newLeft;
-            signatureData.y = newTop;
+
+            // Guardar en coordenadas del canvas (píxeles reales), no en CSS
+            try {
+                const canvas = document.getElementById('documentCanvas');
+                if (canvas) {
+                    const rect = canvas.getBoundingClientRect();
+                    const displayWidth = rect.width || parseFloat(canvas.style.width) || canvas.width;
+                    const displayHeight = rect.height || parseFloat(canvas.style.height) || canvas.height;
+                    const pixelWidth = canvas.width;
+                    const pixelHeight = canvas.height;
+
+                    if (displayWidth > 0 && displayHeight > 0) {
+                        signatureData.x = Math.round((newLeft / displayWidth) * pixelWidth);
+                        signatureData.y = Math.round((newTop / displayHeight) * pixelHeight);
+                    } else {
+                        signatureData.x = Math.round(newLeft);
+                        signatureData.y = Math.round(newTop);
+                    }
+                } else {
+                    signatureData.x = Math.round(newLeft);
+                    signatureData.y = Math.round(newTop);
+                }
+            } catch (err) {
+                signatureData.x = Math.round(newLeft);
+                signatureData.y = Math.round(newTop);
+            }
         };
         
         const dragEnd = () => {
@@ -5121,10 +5144,56 @@ class DocumentService {
             element.style.left = newLeft + 'px';
             element.style.top = newTop + 'px';
             
-            signatureData.width = newWidth;
-            signatureData.height = newHeight;
-            signatureData.x = newLeft;
-            signatureData.y = newTop;
+            // Convertir tamaño CSS a tamaño en píxeles del canvas
+            try {
+                const canvas = document.getElementById('documentCanvas');
+                if (canvas) {
+                    const rect = canvas.getBoundingClientRect();
+                    const displayWidth = rect.width || parseFloat(canvas.style.width) || canvas.width;
+                    const displayHeight = rect.height || parseFloat(canvas.style.height) || canvas.height;
+                    const pixelWidth = canvas.width;
+                    const pixelHeight = canvas.height;
+
+                    if (displayWidth > 0 && displayHeight > 0) {
+                        signatureData.width = Math.round((newWidth / displayWidth) * pixelWidth);
+                        signatureData.height = Math.round((newHeight / displayHeight) * pixelHeight);
+                    } else {
+                        signatureData.width = Math.round(newWidth);
+                        signatureData.height = Math.round(newHeight);
+                    }
+                } else {
+                    signatureData.width = Math.round(newWidth);
+                    signatureData.height = Math.round(newHeight);
+                }
+            } catch (err) {
+                signatureData.width = Math.round(newWidth);
+                signatureData.height = Math.round(newHeight);
+            }
+            // Guardar en coordenadas del canvas (píxeles reales), no en CSS
+            try {
+                const canvas = document.getElementById('documentCanvas');
+                if (canvas) {
+                    const rect = canvas.getBoundingClientRect();
+                    const displayWidth = rect.width || parseFloat(canvas.style.width) || canvas.width;
+                    const displayHeight = rect.height || parseFloat(canvas.style.height) || canvas.height;
+                    const pixelWidth = canvas.width;
+                    const pixelHeight = canvas.height;
+
+                    if (displayWidth > 0 && displayHeight > 0) {
+                        signatureData.x = Math.round((newLeft / displayWidth) * pixelWidth);
+                        signatureData.y = Math.round((newTop / displayHeight) * pixelHeight);
+                    } else {
+                        signatureData.x = Math.round(newLeft);
+                        signatureData.y = Math.round(newTop);
+                    }
+                } else {
+                    signatureData.x = Math.round(newLeft);
+                    signatureData.y = Math.round(newTop);
+                }
+            } catch (err) {
+                signatureData.x = Math.round(newLeft);
+                signatureData.y = Math.round(newTop);
+            }
         };
         
         const resizeEnd = () => {
@@ -5176,8 +5245,31 @@ class DocumentService {
             element.style.left = newLeft + 'px';
             element.style.top = newTop + 'px';
             
-            signatureData.x = newLeft;
-            signatureData.y = newTop;
+            // Guardar en coordenadas del canvas (píxeles reales), no en CSS
+            try {
+                const canvas = document.getElementById('documentCanvas');
+                if (canvas) {
+                    const rect = canvas.getBoundingClientRect();
+                    const displayWidth = rect.width || parseFloat(canvas.style.width) || canvas.width;
+                    const displayHeight = rect.height || parseFloat(canvas.style.height) || canvas.height;
+                    const pixelWidth = canvas.width;
+                    const pixelHeight = canvas.height;
+
+                    if (displayWidth > 0 && displayHeight > 0) {
+                        signatureData.x = Math.round((newLeft / displayWidth) * pixelWidth);
+                        signatureData.y = Math.round((newTop / displayHeight) * pixelHeight);
+                    } else {
+                        signatureData.x = Math.round(newLeft);
+                        signatureData.y = Math.round(newTop);
+                    }
+                } else {
+                    signatureData.x = Math.round(newLeft);
+                    signatureData.y = Math.round(newTop);
+                }
+            } catch (err) {
+                signatureData.x = Math.round(newLeft);
+                signatureData.y = Math.round(newTop);
+            }
         };
         
         const dragEnd = () => {
@@ -5238,10 +5330,39 @@ class DocumentService {
             element.style.left = newLeft + 'px';
             element.style.top = newTop + 'px';
             
-            signatureData.width = newWidth;
-            signatureData.height = newHeight;
-            signatureData.x = newLeft;
-            signatureData.y = newTop;
+            // Guardar tamaño y posición en coordenadas del canvas (píxeles reales)
+            try {
+                const canvas = document.getElementById('documentCanvas');
+                if (canvas) {
+                    const rect = canvas.getBoundingClientRect();
+                    const displayWidth = rect.width || parseFloat(canvas.style.width) || canvas.width;
+                    const displayHeight = rect.height || parseFloat(canvas.style.height) || canvas.height;
+                    const pixelWidth = canvas.width;
+                    const pixelHeight = canvas.height;
+
+                    if (displayWidth > 0 && displayHeight > 0) {
+                        signatureData.width = Math.round((newWidth / displayWidth) * pixelWidth);
+                        signatureData.height = Math.round((newHeight / displayHeight) * pixelHeight);
+                        signatureData.x = Math.round((newLeft / displayWidth) * pixelWidth);
+                        signatureData.y = Math.round((newTop / displayHeight) * pixelHeight);
+                    } else {
+                        signatureData.width = Math.round(newWidth);
+                        signatureData.height = Math.round(newHeight);
+                        signatureData.x = Math.round(newLeft);
+                        signatureData.y = Math.round(newTop);
+                    }
+                } else {
+                    signatureData.width = Math.round(newWidth);
+                    signatureData.height = Math.round(newHeight);
+                    signatureData.x = Math.round(newLeft);
+                    signatureData.y = Math.round(newTop);
+                }
+            } catch (err) {
+                signatureData.width = Math.round(newWidth);
+                signatureData.height = Math.round(newHeight);
+                signatureData.x = Math.round(newLeft);
+                signatureData.y = Math.round(newTop);
+            }
         };
         
         const resizeEnd = () => {
@@ -6602,12 +6723,11 @@ class DocumentExportService {
 
                     // Dibujar firmas que correspondan a esta página
                     if (displayCanvas && signatureLayer) {
-                        const displayRect = displayCanvas.getBoundingClientRect();
-                        const displayWidth = displayRect.width;
-                        const displayHeight = displayRect.height;
+                        const viewerPixelWidth = displayCanvas.width || canvas.width;
+                        const viewerPixelHeight = displayCanvas.height || canvas.height;
 
-                        const scaleFactorX = canvas.width / displayWidth;
-                        const scaleFactorY = canvas.height / displayHeight;
+                        const scaleFactorX = canvas.width / viewerPixelWidth;
+                        const scaleFactorY = canvas.height / viewerPixelHeight;
 
                         // Seleccionar firmas del documento que tienen page == p (o undefined->1)
                         const signatures = (DocumentService.documentSignatures || []).filter(s => (s.page || 1) === p);
@@ -6683,29 +6803,25 @@ class DocumentExportService {
                 if (!displayCanvas || !signatureLayer) {
                     console.warn('combineWithImage: canvas o signatureLayer no encontrados');
                 } else {
-                    const displayRect = displayCanvas.getBoundingClientRect();
-                    const displayWidth = displayRect.width;
-                    const displayHeight = displayRect.height;
+                    const viewerPixelWidth = displayCanvas.width || canvas.width;
+                    const viewerPixelHeight = displayCanvas.height || canvas.height;
 
-                    const scaleFactorX = canvas.width / displayWidth;
-                    const scaleFactorY = canvas.height / displayHeight;
+                    const scaleFactorX = canvas.width / viewerPixelWidth;
+                    const scaleFactorY = canvas.height / viewerPixelHeight;
 
-                    const signatures = signatureLayer.querySelectorAll('.document-signature');
+                    const signatures = (DocumentService.documentSignatures || []).filter(s => (s.page || 1) === (DocumentService.currentPage || 1));
                     console.log(`combineWithImage: firmas detectadas = ${signatures.length}`, { scaleFactorX, scaleFactorY });
 
-                    for (const signature of signatures) {
-                        const imgSignature = signature.querySelector('img');
-                        if (imgSignature && imgSignature.src) {
+                    for (const s of signatures) {
+                        try {
+                            const imgSignature = new Image();
+                            imgSignature.src = s.data;
                             await this.waitForImageLoad(imgSignature);
-                            const left = parseFloat(signature.style.left) || 0;
-                            const top = parseFloat(signature.style.top) || 0;
-                            const w = parseFloat(signature.style.width) || imgSignature.naturalWidth;
-                            const h = parseFloat(signature.style.height) || imgSignature.naturalHeight;
 
-                            const x = left * scaleFactorX;
-                            const y = top * scaleFactorY;
-                            const width = w * scaleFactorX;
-                            const height = h * scaleFactorY;
+                            const x = (s.x || 0) * scaleFactorX;
+                            const y = (s.y || 0) * scaleFactorY;
+                            const width = (s.width || imgSignature.naturalWidth) * scaleFactorX;
+                            const height = (s.height || imgSignature.naturalHeight) * scaleFactorY;
 
                             ctx.imageSmoothingEnabled = true;
                             ctx.imageSmoothingQuality = 'high';
@@ -6714,6 +6830,8 @@ class DocumentExportService {
                             } catch (drawErr) {
                                 console.error('Error dibujando imagen de firma en image canvas:', drawErr, { x, y, width, height, imgSrc: imgSignature.src });
                             }
+                        } catch (inner) {
+                            console.warn('combineWithImage: fallo cargando firma', inner, s);
                         }
                     }
                 }
