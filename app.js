@@ -1765,6 +1765,10 @@ class DocumentService {
     static isSignatureMode = false;
     static currentSignature = null;
     static documentSignatures = [];
+    static pdfDocument = null; // cached pdf.js document
+    static currentPage = 1;
+    static totalPages = 1;
+    static lastRenderTask = null;
     static isDraggingSignature = false;
     static isResizingSignature = false;
     static currentDraggingSignature = null;
@@ -5368,6 +5372,12 @@ class DocumentService {
                 extension: file.extension,
                 source: file.source || 'uploaded'  // 'uploaded' o 'signed'
             };
+
+            // Reset PDF cache and page state for the newly loaded document
+            this.pdfDocument = null;
+            this.pdfDocumentUrl = null;
+            this.currentPage = 1;
+            this.totalPages = 1;
             
             // CARGAR METADATOS DE FIRMAS SI EXISTEN
             // Si el documento viene como 'signed' (firmado), las firmas
@@ -5402,6 +5412,8 @@ class DocumentService {
                     this.initializeDocumentInteractions();
                     
                     this.applyRealZoom();
+                    // Crear controles de paginación para documentos multipágina
+                    this.createPageControls();
                     
                     showNotification(`Documento "${file.name}" cargado`);
                     resolve(this.currentDocument);
@@ -5504,40 +5516,63 @@ class DocumentService {
     }
 
     static async renderPDFDocument(canvas, ctx) {
+        // Nueva implementación: soporta render de página específica en `this.currentPage`
+        const pageNumber = this.currentPage || 1;
         try {
             let pdfUrl = this.currentDocument.url;
-            
+
             // Si es un placeholder, mostrar mensaje
             if (pdfUrl.includes('placeholder')) {
                 this.showPDFFallback(canvas, ctx);
                 return;
             }
-            
-            const loadingTask = pdfjsLib.getDocument(pdfUrl);
-            const pdf = await loadingTask.promise;
-            const page = await pdf.getPage(1);
-            
+
+            // Cargar y cachear PDF si no está cargado o es distinto
+            if (!this.pdfDocument || this.pdfDocumentUrl !== pdfUrl) {
+                const loadingTask = pdfjsLib.getDocument(pdfUrl);
+                this.pdfDocument = await loadingTask.promise;
+                this.pdfDocumentUrl = pdfUrl;
+                this.totalPages = this.pdfDocument.numPages || 1;
+                console.log('PDF cargado, páginas =', this.totalPages);
+            }
+
+            // Clamp page
+            const pageIndex = Math.min(Math.max(1, pageNumber), this.totalPages);
+            const page = await this.pdfDocument.getPage(pageIndex);
+
             const viewport = page.getViewport({ scale: 1 });
             const originalWidth = viewport.width;
             const originalHeight = viewport.height;
-            
+
             const optimalSize = this.calculateOptimalDocumentSize(originalWidth, originalHeight, 1.5);
-            
+
             canvas.width = optimalSize.width;
             canvas.height = optimalSize.height;
-            
+
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
-            
+
             const optimalViewport = page.getViewport({ scale: optimalSize.scale });
-            
+
             const renderContext = {
                 canvasContext: ctx,
                 viewport: optimalViewport
             };
-            
-            await page.render(renderContext).promise;
-            
+
+            // Cancel previous render task if still running to avoid canvas conflicts
+            try {
+                if (this.lastRenderTask && typeof this.lastRenderTask.cancel === 'function') {
+                    this.lastRenderTask.cancel();
+                }
+            } catch (cancelErr) {
+                console.warn('Error cancelando render anterior:', cancelErr);
+            }
+
+            const renderTask = page.render(renderContext);
+            this.lastRenderTask = renderTask;
+            await renderTask.promise;
+            this.lastRenderTask = null;
+
         } catch (error) {
             console.error('Error al renderizar PDF:', error);
             this.showPDFFallback(canvas, ctx);
@@ -5804,13 +5839,96 @@ class DocumentService {
         }
 
         // Renderizar solo las firmas interactivas (no las "bakedIn")
+        // Además, mostrar solo las firmas correspondientes a la página actual
+        const pageToShow = this.currentPage || 1;
         this.documentSignatures.forEach(signature => {
             if (signature.bakedIn) return; // evitar duplicar firmas ya integradas en la imagen
+            // Si la firma tiene asignada una página, compararla; si no, asumir página 1
+            const sigPage = signature.page || 1;
+            if (sigPage !== pageToShow) return;
             const signatureElement = this.createSignatureElement(signature);
             signatureLayer.appendChild(signatureElement);
         });
 
         this.repositionSignaturesForZoom();
+    }
+
+    // ==========================
+    // Paginación de PDF
+    // ==========================
+    static async goToPage(n) {
+        if (!this.currentDocument) return;
+        const target = Math.min(Math.max(1, n), this.totalPages || 1);
+        this.currentPage = target;
+        const canvas = document.getElementById('documentCanvas');
+        const ctx = canvas.getContext('2d');
+        await this.renderPDFDocument(canvas, ctx);
+        this.renderExistingSignatures();
+        this.renderSignaturesList();
+        this.updatePageControls();
+    }
+
+    static nextPage() {
+        return this.goToPage((this.currentPage || 1) + 1);
+    }
+
+    static prevPage() {
+        return this.goToPage((this.currentPage || 1) - 1);
+    }
+
+    static createPageControls() {
+        const container = document.getElementById('documentContainer');
+        if (!container) return;
+
+        // Evitar duplicar controles
+        let controls = document.getElementById('pageControls');
+        if (!controls) {
+            controls = document.createElement('div');
+            controls.id = 'pageControls';
+            controls.style.position = 'absolute';
+            controls.style.right = '12px';
+            controls.style.top = '12px';
+            controls.style.zIndex = 9999;
+            controls.style.display = 'flex';
+            controls.style.gap = '6px';
+
+            const prev = document.createElement('button');
+            prev.className = 'btn btn-outline';
+            prev.id = 'prevPageBtn';
+            prev.innerHTML = '<i class="fas fa-chevron-left"></i>';
+            prev.addEventListener('click', () => this.prevPage());
+
+            const pageInfo = document.createElement('div');
+            pageInfo.id = 'pageInfo';
+            pageInfo.style.color = 'white';
+            pageInfo.style.padding = '8px 12px';
+            pageInfo.style.background = 'rgba(0,0,0,0.45)';
+            pageInfo.style.borderRadius = '6px';
+
+            const next = document.createElement('button');
+            next.className = 'btn btn-outline';
+            next.id = 'nextPageBtn';
+            next.innerHTML = '<i class="fas fa-chevron-right"></i>';
+            next.addEventListener('click', () => this.nextPage());
+
+            controls.appendChild(prev);
+            controls.appendChild(pageInfo);
+            controls.appendChild(next);
+            container.style.position = 'relative';
+            container.appendChild(controls);
+        }
+
+        this.updatePageControls();
+    }
+
+    static updatePageControls() {
+        const pageInfo = document.getElementById('pageInfo');
+        if (!pageInfo) return;
+        pageInfo.textContent = `${this.currentPage || 1} / ${this.totalPages || 1}`;
+        const prev = document.getElementById('prevPageBtn');
+        const next = document.getElementById('nextPageBtn');
+        if (prev) prev.disabled = (this.currentPage || 1) <= 1;
+        if (next) next.disabled = (this.currentPage || 1) >= (this.totalPages || 1);
     }
 
     static createSignatureElement(signature) {
@@ -6165,6 +6283,7 @@ class DocumentService {
                 data: this.currentSignature.data,
                 userName: AppState.currentUser.name,
                 userEmail: AppState.currentUser.email,
+                page: this.currentPage || 1,
                 x: position.x,
                 y: position.y,
                 width: width,
@@ -6456,88 +6575,80 @@ class DocumentExportService {
             try {
                 const loadingTask = pdfjsLib.getDocument(DocumentService.currentDocument.url);
                 const pdf = await loadingTask.promise;
-                const page = await pdf.getPage(1);
-                
-                const scale = 2.0;
-                const viewport = page.getViewport({ scale });
-                
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                
-                canvas.width = viewport.width;
-                canvas.height = viewport.height;
-                
-                ctx.imageSmoothingEnabled = true;
-                ctx.imageSmoothingQuality = 'high';
-                
-                const renderContext = {
-                    canvasContext: ctx,
-                    viewport: viewport
-                };
-                
-                await page.render(renderContext).promise;
+                const numPages = pdf.numPages || 1;
 
                 const displayCanvas = document.getElementById('documentCanvas');
                 const signatureLayer = document.getElementById('signatureLayer');
 
-                if (!displayCanvas || !signatureLayer) {
-                    console.warn('combineWithPDF: canvas o signatureLayer no encontrados');
-                } else {
-                    // Usar bounding rect para obtener el tamaño real mostrado (CSS/transform)
-                    const displayRect = displayCanvas.getBoundingClientRect();
-                    const displayWidth = displayRect.width;
-                    const displayHeight = displayRect.height;
+                // canvas para composición por página
+                const { jsPDF } = window.jspdf;
+                let pdfOutput = null;
 
-                    const scaleFactorX = canvas.width / displayWidth;
-                    const scaleFactorY = canvas.height / displayHeight;
+                for (let p = 1; p <= numPages; p++) {
+                    const page = await pdf.getPage(p);
+                    const scale = 2.0;
+                    const viewport = page.getViewport({ scale });
 
-                    const signatures = signatureLayer.querySelectorAll('.document-signature');
-                    console.log(`combineWithPDF: firmas detectadas = ${signatures.length}`, { scaleFactorX, scaleFactorY });
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
 
-                    for (const signature of signatures) {
-                        const img = signature.querySelector('img');
-                        if (img && img.src) {
-                            await this.waitForImageLoad(img);
-                            const left = parseFloat(signature.style.left) || 0;
-                            const top = parseFloat(signature.style.top) || 0;
-                            const w = parseFloat(signature.style.width) || img.naturalWidth;
-                            const h = parseFloat(signature.style.height) || img.naturalHeight;
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
 
-                            const x = left * scaleFactorX;
-                            const y = top * scaleFactorY;
-                            const width = w * scaleFactorX;
-                            const height = h * scaleFactorY;
+                    const renderContext = { canvasContext: ctx, viewport };
+                    await page.render(renderContext).promise;
 
-                            ctx.imageSmoothingEnabled = true;
-                            ctx.imageSmoothingQuality = 'high';
+                    // Dibujar firmas que correspondan a esta página
+                    if (displayCanvas && signatureLayer) {
+                        const displayRect = displayCanvas.getBoundingClientRect();
+                        const displayWidth = displayRect.width;
+                        const displayHeight = displayRect.height;
+
+                        const scaleFactorX = canvas.width / displayWidth;
+                        const scaleFactorY = canvas.height / displayHeight;
+
+                        // Seleccionar firmas del documento que tienen page == p (o undefined->1)
+                        const signatures = (DocumentService.documentSignatures || []).filter(s => (s.page || 1) === p);
+                        console.log(`combineWithPDF: renderizando página ${p}, firmas = ${signatures.length}`, { scaleFactorX, scaleFactorY });
+
+                        for (const s of signatures) {
                             try {
+                                const img = new Image();
+                                img.src = s.data;
+                                await this.waitForImageLoad(img);
+
+                                const x = (s.x || 0) * scaleFactorX;
+                                const y = (s.y || 0) * scaleFactorY;
+                                const width = (s.width || img.naturalWidth) * scaleFactorX;
+                                const height = (s.height || img.naturalHeight) * scaleFactorY;
+
+                                ctx.imageSmoothingEnabled = true;
+                                ctx.imageSmoothingQuality = 'high';
                                 ctx.drawImage(img, x, y, width, height);
-                            } catch (drawErr) {
-                                console.error('Error dibujando imagen de firma en PDF canvas:', drawErr, { x, y, width, height, imgSrc: img.src });
+                            } catch (innerErr) {
+                                console.error('combineWithPDF: error dibujando firma fallback', innerErr, s);
                             }
                         }
                     }
+
+                    // Añadir página al jsPDF
+                    if (!pdfOutput) {
+                        pdfOutput = new jsPDF({ orientation: canvas.width > canvas.height ? 'landscape' : 'portrait', unit: 'px', format: [canvas.width, canvas.height] });
+                        const imgData = canvas.toDataURL('image/png', 1.0);
+                        pdfOutput.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height, undefined, 'FAST');
+                    } else {
+                        pdfOutput.addPage([canvas.width, canvas.height]);
+                        const imgData = canvas.toDataURL('image/png', 1.0);
+                        pdfOutput.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height, undefined, 'FAST');
+                    }
                 }
 
-                const { jsPDF } = window.jspdf;
-                const pdfOutput = new jsPDF({
-                    orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
-                    unit: 'px',
-                    format: [canvas.width, canvas.height]
-                });
-
-                const imgData = canvas.toDataURL('image/png', 1.0);
-                pdfOutput.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height, undefined, 'FAST');
-                
                 const pdfBlob = pdfOutput.output('blob');
                 const pdfUrl = URL.createObjectURL(pdfBlob);
-                
-                resolve({
-                    blob: pdfBlob,
-                    url: pdfUrl,
-                    type: 'application/pdf',
-                    fileName: `documento_firmado_${Date.now()}.pdf`
-                });
+
+                resolve({ blob: pdfBlob, url: pdfUrl, type: 'application/pdf', fileName: `documento_firmado_${Date.now()}.pdf` });
 
             } catch (error) {
                 console.error('Error en combineWithPDF:', error);
