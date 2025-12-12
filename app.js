@@ -5343,6 +5343,8 @@ class DocumentService {
 
     static async loadDocument(file) {
         return new Promise((resolve) => {
+            console.log('📄 loadDocument INICIADO:', file.name, 'con', (file.signatures || []).length, 'firmas');
+            
             this.documentSignatures = [];
             this.currentSignature = null;
             this.currentZoom = 1.0;
@@ -5351,8 +5353,6 @@ class DocumentService {
             if (signatureLayer) {
                 signatureLayer.innerHTML = '';
             }
-
-            this.renderSignaturesList();
 
             this.currentDocument = {
                 id: file.id,
@@ -5369,16 +5369,35 @@ class DocumentService {
                 source: file.source || 'uploaded'  // 'uploaded' o 'signed'
             };
             
-            // SOLO CARGAMOS FIRMAS SI EL DOCUMENTO NO ES UN DOCUMENTO FIRMADO
-            // Porque en un documento firmado, las firmas ya están en la imagen
-            if (file.source !== 'signed' && file.signatures && file.signatures.length > 0) {
-                this.documentSignatures = [...file.signatures];
+            // CARGAR METADATOS DE FIRMAS SI EXISTEN
+            // Si el documento viene como 'signed' (firmado), las firmas
+            // ya están integradas en la imagen, pero queremos conservar
+            // la metadata para mostrar la lista de firmantes y permitir
+            // agregar firmas adicionales. Marcar las firmas previas como
+            // `bakedIn: true` para evitar render visual duplicado.
+            if (file.signatures && file.signatures.length > 0) {
+                this.documentSignatures = file.signatures.map(sig => ({
+                    ...sig,
+                    bakedIn: file.source === 'signed' ? true : (sig.bakedIn || false)
+                }));
+                console.log('✅ Firmas cargadas para', file.name, ':', this.documentSignatures.length);
+            } else {
+                this.documentSignatures = [];
+                console.log('⭕ Sin firmas para', file.name);
             }
+
+            // Asegurar que el documento actual tenga la metadata de firmas
+            // y actualizar la vista inmediatamente para evitar mostrar
+            // firmas de un documento anterior.
+            this.currentDocument.signatures = this.documentSignatures;
+            console.log('🔄 Llamando renderSignaturesList desde loadDocument para:', file.name);
+            this.renderSignaturesList();
             
             setTimeout(async () => {
                 try {
                     await this.renderDocument();
                     this.renderDocumentSelector();
+                    console.log('🔄 Llamando renderSignaturesList desde setTimeout para:', file.name);
                     this.renderSignaturesList();
                     this.initializeDocumentInteractions();
                     
@@ -5776,27 +5795,21 @@ class DocumentService {
     static renderExistingSignatures() {
         const signatureLayer = document.getElementById('signatureLayer');
         if (!signatureLayer) return;
-        
-        // NO RENDERIZAR FIRMAS SI EL DOCUMENTO YA ESTÁ FIRMADO
-        if (this.currentDocument && this.currentDocument.source === 'signed') {
-            signatureLayer.innerHTML = '';
-            console.log('Documento ya firmado: no se renderizan firmas interactivas');
-            return;
-        }
-        
         signatureLayer.innerHTML = '';
-        
+
         const canvas = document.getElementById('documentCanvas');
         if (canvas) {
             signatureLayer.style.width = canvas.style.width;
             signatureLayer.style.height = canvas.style.height;
         }
-        
+
+        // Renderizar solo las firmas interactivas (no las "bakedIn")
         this.documentSignatures.forEach(signature => {
+            if (signature.bakedIn) return; // evitar duplicar firmas ya integradas en la imagen
             const signatureElement = this.createSignatureElement(signature);
             signatureLayer.appendChild(signatureElement);
         });
-        
+
         this.repositionSignaturesForZoom();
     }
 
@@ -6207,27 +6220,48 @@ class DocumentService {
         const signaturesGrid = document.getElementById('signaturesGrid');
         const noSignatures = document.getElementById('noSignatures');
         
-        if (!signaturesGrid || !noSignatures) return;
+        console.log('🎯 renderSignaturesList LLAMADO. signaturesGrid exists:', !!signaturesGrid, 'noSignatures exists:', !!noSignatures);
         
-        if (this.documentSignatures.length === 0) {
-            noSignatures.style.display = 'flex';
-            signaturesGrid.innerHTML = '';
-            signaturesGrid.appendChild(noSignatures);
+        if (!signaturesGrid || !noSignatures) {
+            console.warn('❌ signaturesGrid o noSignatures no encontrados. Saliendo.');
             return;
         }
-        
+        // Prefer signatures from the currently loaded document to avoid
+        // showing stale signatures from a previously opened file.
+        const signatures = (this.currentDocument && Array.isArray(this.currentDocument.signatures))
+            ? this.currentDocument.signatures
+            : this.documentSignatures || [];
+
+        // Keep internal array in sync
+        this.documentSignatures = signatures;
+
+        console.log('renderSignaturesList: currentDocument=', this.currentDocument ? this.currentDocument.id : 'none', 'signaturesCount=', signatures.length);
+
+        if (signatures.length === 0) {
+            console.log('✅ Mostrando "No hay firmas"');
+            noSignatures.style.display = 'flex';
+            // Vaciar los badges pero MANTENER noSignatures en el DOM
+            signaturesGrid.querySelectorAll('.signature-badge').forEach(el => el.remove());
+            return;
+        }
+
+        console.log('✅ Renderizando', signatures.length, 'firmas');
         noSignatures.style.display = 'none';
-        signaturesGrid.innerHTML = '';
         
-        this.documentSignatures.forEach(signature => {
+        // Vaciar solo los badges, NO borrar toda la grilla (evita eliminar noSignatures)
+        signaturesGrid.querySelectorAll('.signature-badge').forEach(el => el.remove());
+
+        signatures.forEach((signature, idx) => {
+            console.log('  📌 Firma', idx + 1, ':', signature.userName);
             const signatureBadge = document.createElement('div');
             signatureBadge.className = 'signature-badge';
             signatureBadge.innerHTML = `
-                <div class="signature-avatar">${signature.userName.substring(0, 2).toUpperCase()}</div>
-                <div class="signature-user">${signature.userName}</div>
+                <div class="signature-avatar">${(signature.userName || '').substring(0, 2).toUpperCase()}</div>
+                <div class="signature-user">${signature.userName || 'Desconocido'}</div>
             `;
             signaturesGrid.appendChild(signatureBadge);
         });
+        console.log('✅ renderSignaturesList completado');
     }
 
     static removeSignature(signatureId) {
@@ -7400,13 +7434,23 @@ DocumentService.saveDocumentWithSignatures = async function() {
             signedFileName,
             this.documentSignatures
         );
-        
-        this.documentSignatures = [];
+
+        // Actualizar documento actual en memoria con el nuevo archivo firmado
+        this.currentDocument = signedFileData;
+
+        // Marcar todas las firmas como "bakedIn" (integradas en la nueva imagen)
+        if (signedFileData.signatures && signedFileData.signatures.length > 0) {
+            this.documentSignatures = signedFileData.signatures.map(s => ({ ...s, bakedIn: true }));
+        } else {
+            this.documentSignatures = [];
+        }
+
+        // Re-renderizar lista; no renderizar overlays para firmas bakedIn
         this.renderExistingSignatures();
         this.renderSignaturesList();
-        
+
         showNotification(`Documento firmado guardado exitosamente en Supabase: ${signedFileName}`);
-        
+
         return signedFileData;
         
     } catch (error) {
