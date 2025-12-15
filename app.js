@@ -5987,6 +5987,7 @@ class DocumentService {
                 signatureElement.style.top = scaledY + 'px';
                 signatureElement.style.width = scaledWidth + 'px';
                 signatureElement.style.height = scaledHeight + 'px';
+                console.log('repositionSignaturesForZoom:', signature.id, 'scaled left/top/wh(px)=', Math.round(scaledX), Math.round(scaledY), Math.round(scaledWidth), Math.round(scaledHeight));
             }
         });
     }
@@ -6117,6 +6118,7 @@ class DocumentService {
             signatureElement.style.top = top + 'px';
             signatureElement.style.width = w + 'px';
             signatureElement.style.height = h + 'px';
+            console.log('renderOverlay: sig', signature.id, 'left/top/wh(px)=', Math.round(left), Math.round(top), Math.round(w), Math.round(h), 'usingNorm=', typeof signature.normX === 'number');
         } else {
             signatureElement.style.left = signature.x + 'px';
             signatureElement.style.top = signature.y + 'px';
@@ -6126,7 +6128,7 @@ class DocumentService {
         signatureElement.dataset.signatureId = signature.id;
         
         signatureElement.innerHTML = `
-            <img src="${signature.data}" alt="Firma de ${signature.userName}" onerror="this.style.display='none'" style="image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; background: transparent !important;">
+            <img src="${signature.data}" alt="Firma de ${signature.userName}" onerror="this.style.display='none'" style="image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; background: transparent !important; display:block;">
             <div class="signature-handle handle-top-left"></div>
             <div class="signature-handle handle-top-right"></div>
             <div class="signature-handle handle-bottom-left"></div>

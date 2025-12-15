@@ -2203,11 +2203,16 @@
         transition: all 0.3s;
         min-width: 100px;
         min-height: 50px;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
     }
 
     .document-signature img {
-        max-width: 100%;
-        max-height: 100%;
+        width: 100%;
+        height: 100%;
         object-fit: contain;
         pointer-events: none;
         background: transparent !important;
