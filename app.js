@@ -71,10 +71,10 @@ class SupabaseStorageService {
                                 const img = new Image();
                                 img.src = s.data; // data URL
                                 await this.waitForImageLoad(img);
-                                const x = (s.x || 0) * scaleXAttr;
-                                const y = (s.y || 0) * scaleYAttr;
-                                const width = (s.width || img.naturalWidth) * scaleXAttr;
-                                const height = (s.height || img.naturalHeight) * scaleYAttr;
+                                const x = (typeof s.normX === 'number' ? s.normX * canvas.width : (s.x || 0) * scaleXAttr);
+                                const y = (typeof s.normY === 'number' ? s.normY * canvas.height : (s.y || 0) * scaleYAttr);
+                                const width = (typeof s.normWidth === 'number' ? s.normWidth * canvas.width : (s.width || img.naturalWidth) * scaleXAttr);
+                                const height = (typeof s.normHeight === 'number' ? s.normHeight * canvas.height : (s.height || img.naturalHeight) * scaleYAttr);
                                 ctx.imageSmoothingEnabled = true;
                                 ctx.imageSmoothingQuality = 'high';
                                 try {
@@ -5072,17 +5072,26 @@ class DocumentService {
                     if (displayWidth > 0 && displayHeight > 0) {
                         signatureData.x = Math.round((newLeft / displayWidth) * pixelWidth);
                         signatureData.y = Math.round((newTop / displayHeight) * pixelHeight);
+                        // Actualizar valores normalizados
+                        signatureData.normX = +(signatureData.x / pixelWidth) || 0;
+                        signatureData.normY = +(signatureData.y / pixelHeight) || 0;
                     } else {
                         signatureData.x = Math.round(newLeft);
                         signatureData.y = Math.round(newTop);
+                        signatureData.normX = 0;
+                        signatureData.normY = 0;
                     }
                 } else {
                     signatureData.x = Math.round(newLeft);
                     signatureData.y = Math.round(newTop);
+                    signatureData.normX = 0;
+                    signatureData.normY = 0;
                 }
             } catch (err) {
                 signatureData.x = Math.round(newLeft);
                 signatureData.y = Math.round(newTop);
+                signatureData.normX = 0;
+                signatureData.normY = 0;
             }
         };
         
@@ -5158,9 +5167,13 @@ class DocumentService {
                     if (displayWidth > 0 && displayHeight > 0) {
                         signatureData.width = Math.round((newWidth / displayWidth) * pixelWidth);
                         signatureData.height = Math.round((newHeight / displayHeight) * pixelHeight);
+                        signatureData.normWidth = +(signatureData.width / pixelWidth) || 0;
+                        signatureData.normHeight = +(signatureData.height / pixelHeight) || 0;
                     } else {
                         signatureData.width = Math.round(newWidth);
                         signatureData.height = Math.round(newHeight);
+                        signatureData.normWidth = 0;
+                        signatureData.normHeight = 0;
                     }
                 } else {
                     signatureData.width = Math.round(newWidth);
@@ -5183,17 +5196,25 @@ class DocumentService {
                     if (displayWidth > 0 && displayHeight > 0) {
                         signatureData.x = Math.round((newLeft / displayWidth) * pixelWidth);
                         signatureData.y = Math.round((newTop / displayHeight) * pixelHeight);
+                        signatureData.normX = +(signatureData.x / pixelWidth) || 0;
+                        signatureData.normY = +(signatureData.y / pixelHeight) || 0;
                     } else {
                         signatureData.x = Math.round(newLeft);
                         signatureData.y = Math.round(newTop);
+                        signatureData.normX = 0;
+                        signatureData.normY = 0;
                     }
                 } else {
                     signatureData.x = Math.round(newLeft);
                     signatureData.y = Math.round(newTop);
+                    signatureData.normX = 0;
+                    signatureData.normY = 0;
                 }
             } catch (err) {
                 signatureData.x = Math.round(newLeft);
                 signatureData.y = Math.round(newTop);
+                signatureData.normX = 0;
+                signatureData.normY = 0;
             }
         };
         
@@ -5346,23 +5367,39 @@ class DocumentService {
                         signatureData.height = Math.round((newHeight / displayHeight) * pixelHeight);
                         signatureData.x = Math.round((newLeft / displayWidth) * pixelWidth);
                         signatureData.y = Math.round((newTop / displayHeight) * pixelHeight);
+                        signatureData.normWidth = +(signatureData.width / pixelWidth) || 0;
+                        signatureData.normHeight = +(signatureData.height / pixelHeight) || 0;
+                        signatureData.normX = +(signatureData.x / pixelWidth) || 0;
+                        signatureData.normY = +(signatureData.y / pixelHeight) || 0;
                     } else {
                         signatureData.width = Math.round(newWidth);
                         signatureData.height = Math.round(newHeight);
                         signatureData.x = Math.round(newLeft);
                         signatureData.y = Math.round(newTop);
+                        signatureData.normWidth = 0;
+                        signatureData.normHeight = 0;
+                        signatureData.normX = 0;
+                        signatureData.normY = 0;
                     }
                 } else {
                     signatureData.width = Math.round(newWidth);
                     signatureData.height = Math.round(newHeight);
                     signatureData.x = Math.round(newLeft);
                     signatureData.y = Math.round(newTop);
+                    signatureData.normWidth = 0;
+                    signatureData.normHeight = 0;
+                    signatureData.normX = 0;
+                    signatureData.normY = 0;
                 }
             } catch (err) {
                 signatureData.width = Math.round(newWidth);
                 signatureData.height = Math.round(newHeight);
                 signatureData.x = Math.round(newLeft);
                 signatureData.y = Math.round(newTop);
+                signatureData.normWidth = 0;
+                signatureData.normHeight = 0;
+                signatureData.normX = 0;
+                signatureData.normY = 0;
             }
         };
         
@@ -5931,15 +5968,20 @@ class DocumentService {
         signatureLayer.style.width = displayWidth + 'px';
         signatureLayer.style.height = displayHeight + 'px';
         
-        // Reposicionar cada firma
+        // Reposicionar cada firma (usar norm* si existe)
         this.documentSignatures.forEach(signature => {
             const signatureElement = document.querySelector(`[data-signature-id="${signature.id}"]`);
             if (signatureElement) {
-                // Calcular posición escalada basada en zoom
-                const scaledX = (signature.x / pixelWidth) * displayWidth;
-                const scaledY = (signature.y / pixelHeight) * displayHeight;
-                const scaledWidth = (signature.width / pixelWidth) * displayWidth;
-                const scaledHeight = (signature.height / pixelHeight) * displayHeight;
+                // Calcular posición escalada basada en coordenadas normalizadas o fallback
+                const relX = (typeof signature.normX === 'number') ? signature.normX : (signature.x / pixelWidth);
+                const relY = (typeof signature.normY === 'number') ? signature.normY : (signature.y / pixelHeight);
+                const relW = (typeof signature.normWidth === 'number') ? signature.normWidth : (signature.width / pixelWidth);
+                const relH = (typeof signature.normHeight === 'number') ? signature.normHeight : (signature.height / pixelHeight);
+
+                const scaledX = relX * displayWidth;
+                const scaledY = relY * displayHeight;
+                const scaledWidth = relW * displayWidth;
+                const scaledHeight = relH * displayHeight;
 
                 signatureElement.style.left = scaledX + 'px';
                 signatureElement.style.top = scaledY + 'px';
@@ -6065,10 +6107,11 @@ class DocumentService {
             const pixelWidth = canvas.width;
             const pixelHeight = canvas.height;
 
-            const left = (signature.x / pixelWidth) * displayWidth;
-            const top = (signature.y / pixelHeight) * displayHeight;
-            const w = (signature.width / pixelWidth) * displayWidth;
-            const h = (signature.height / pixelHeight) * displayHeight;
+            // Preferir coordenadas normalizadas si están presentes
+            const left = (typeof signature.normX === 'number' ? signature.normX : (signature.x / pixelWidth)) * displayWidth;
+            const top = (typeof signature.normY === 'number' ? signature.normY : (signature.y / pixelHeight)) * displayHeight;
+            const w = (typeof signature.normWidth === 'number' ? signature.normWidth : (signature.width / pixelWidth)) * displayWidth;
+            const h = (typeof signature.normHeight === 'number' ? signature.normHeight : (signature.height / pixelHeight)) * displayHeight;
 
             signatureElement.style.left = left + 'px';
             signatureElement.style.top = top + 'px';
@@ -6410,6 +6453,20 @@ class DocumentService {
                 y: position.y,
                 width: width,
                 height: height,
+                // Coordenadas normalizadas respecto al canvas (0..1). Esto hace que
+                // la posición sea independiente del zoom CSS o del tamaño visual.
+                normX: (function(){
+                    try { const c = document.getElementById('documentCanvas'); return c && c.width ? (position.x / c.width) : 0; } catch(e){return 0}
+                })(),
+                normY: (function(){
+                    try { const c = document.getElementById('documentCanvas'); return c && c.height ? (position.y / c.height) : 0; } catch(e){return 0}
+                })(),
+                normWidth: (function(){
+                    try { const c = document.getElementById('documentCanvas'); return c && c.width ? (width / c.width) : 0; } catch(e){return 0}
+                })(),
+                normHeight: (function(){
+                    try { const c = document.getElementById('documentCanvas'); return c && c.height ? (height / c.height) : 0; } catch(e){return 0}
+                })(),
                 timestamp: new Date(),
                 type: this.currentSignature.type,
                 placedBy: 'user_placement',
@@ -6743,13 +6800,15 @@ class DocumentExportService {
                                 img.src = s.data;
                                 await this.waitForImageLoad(img);
 
-                                const x = (s.x || 0) * scaleFactorX;
-                                const y = (s.y || 0) * scaleFactorY;
-                                const width = (s.width || img.naturalWidth) * scaleFactorX;
-                                const height = (s.height || img.naturalHeight) * scaleFactorY;
+                                // Usar coordenadas normalizadas si existen (más robusto cuando hay zoom/transform)
+                                const x = (typeof s.normX === 'number' ? s.normX * canvas.width : (s.x || 0) * scaleFactorX);
+                                const y = (typeof s.normY === 'number' ? s.normY * canvas.height : (s.y || 0) * scaleFactorY);
+                                const width = (typeof s.normWidth === 'number' ? s.normWidth * canvas.width : (s.width || img.naturalWidth) * scaleFactorX);
+                                const height = (typeof s.normHeight === 'number' ? s.normHeight * canvas.height : (s.height || img.naturalHeight) * scaleFactorY);
 
                                 ctx.imageSmoothingEnabled = true;
                                 ctx.imageSmoothingQuality = 'high';
+                                console.log('combineWithPDF: dibujando firma', { id: s.id, page: p, x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height), useNorm: typeof s.normX === 'number' });
                                 ctx.drawImage(img, x, y, width, height);
                             } catch (innerErr) {
                                 console.error('combineWithPDF: error dibujando firma fallback', innerErr, s);
@@ -6824,13 +6883,15 @@ class DocumentExportService {
                             imgSignature.src = s.data;
                             await this.waitForImageLoad(imgSignature);
 
-                            const x = (s.x || 0) * scaleFactorX;
-                            const y = (s.y || 0) * scaleFactorY;
-                            const width = (s.width || imgSignature.naturalWidth) * scaleFactorX;
-                            const height = (s.height || imgSignature.naturalHeight) * scaleFactorY;
+                            // Prefer normalized coordinates (norm*) si están disponibles
+                            const x = (typeof s.normX === 'number' ? s.normX * canvas.width : (s.x || 0) * scaleFactorX);
+                            const y = (typeof s.normY === 'number' ? s.normY * canvas.height : (s.y || 0) * scaleFactorY);
+                            const width = (typeof s.normWidth === 'number' ? s.normWidth * canvas.width : (s.width || imgSignature.naturalWidth) * scaleFactorX);
+                            const height = (typeof s.normHeight === 'number' ? s.normHeight * canvas.height : (s.height || imgSignature.naturalHeight) * scaleFactorY);
 
                             ctx.imageSmoothingEnabled = true;
                             ctx.imageSmoothingQuality = 'high';
+                            console.log('combineWithImage: dibujando firma', { id: s.id, page: DocumentService.currentPage, x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height), useNorm: typeof s.normX === 'number' });
                             try {
                                 ctx.drawImage(imgSignature, x, y, width, height);
                             } catch (drawErr) {
