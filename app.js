@@ -6018,6 +6018,76 @@ class DocumentService {
         this.repositionSignaturesForZoom();
     }
 
+    // Mostrar marcadores temporales para ayudar a depurar diferencias entre
+    // la posición esperada (norm -> display) y la posición real del overlay
+    static _showPlacementMarkers(displayX, displayY, signatureId) {
+        try {
+            const signatureLayer = document.getElementById('signatureLayer');
+            if (!signatureLayer) return;
+
+            // Remover marcadores previos del mismo id
+            const prev = signatureLayer.querySelectorAll(`.placement-marker[data-sig="${signatureId}"]`);
+            prev.forEach(p => p.remove());
+
+            // Marker esperado (verde)
+            const expected = document.createElement('div');
+            expected.className = 'placement-marker expected';
+            expected.style.left = (displayX - 6) + 'px';
+            expected.style.top = (displayY - 6) + 'px';
+            expected.dataset.sig = signatureId;
+
+            // Marker real (rojo) basado en el overlay actual, si existe
+            const actual = document.createElement('div');
+            actual.className = 'placement-marker actual';
+            actual.dataset.sig = signatureId;
+
+            const signatureElement = document.querySelector(`[data-signature-id="${signatureId}"]`);
+            if (signatureElement) {
+                const rect = signatureElement.getBoundingClientRect();
+                const layerRect = signatureLayer.getBoundingClientRect();
+                // Convertir coordenadas absolutas a relativas a la capa
+                const centerX = rect.left - layerRect.left + rect.width / 2;
+                const centerY = rect.top - layerRect.top + rect.height / 2;
+                actual.style.left = (centerX - 6) + 'px';
+                actual.style.top = (centerY - 6) + 'px';
+            } else {
+                // Si no hay overlay, colocar el marker actual encima del esperado
+                actual.style.left = (displayX - 6) + 'px';
+                actual.style.top = (displayY - 6) + 'px';
+            }
+
+            // Etiqueta con coordenadas
+            const label = document.createElement('div');
+            label.className = 'placement-marker-label';
+            const ex = Math.round(displayX);
+            const ey = Math.round(displayY);
+            let ax = ex, ay = ey;
+            if (signatureElement) {
+                const r = signatureElement.getBoundingClientRect();
+                const lr = signatureLayer.getBoundingClientRect();
+                ax = Math.round(r.left - lr.left + r.width / 2);
+                ay = Math.round(r.top - lr.top + r.height / 2);
+            }
+            label.textContent = `exp: ${ex},${ey} — ovl: ${ax},${ay}`;
+            label.dataset.sig = signatureId;
+            label.style.left = (displayX) + 'px';
+            label.style.top = (displayY - 12) + 'px';
+
+            signatureLayer.appendChild(expected);
+            signatureLayer.appendChild(actual);
+            signatureLayer.appendChild(label);
+
+            // Auto remover después de 3s
+            setTimeout(() => {
+                try {
+                    [expected, actual, label].forEach(el => el && el.remove());
+                } catch (e) { /* noop */ }
+            }, 3000);
+        } catch (err) {
+            console.warn('Error _showPlacementMarkers:', err);
+        }
+    }
+
     // ==========================
     // Paginación de PDF
     // ==========================
@@ -6500,6 +6570,22 @@ class DocumentService {
             
             // Actualizar interfaz
             this.renderExistingSignatures();
+            // Mostrar marcadores temporales para depuración visual (posición esperada vs overlay)
+            try {
+                const canvas = document.getElementById('documentCanvas');
+                const signatureLayer = document.getElementById('signatureLayer');
+                if (canvas && signatureLayer) {
+                    const rect = canvas.getBoundingClientRect();
+                    const displayWidth = rect.width;
+                    const displayHeight = rect.height;
+                    const displayX = (signature.normX || (signature.x / canvas.width)) * displayWidth;
+                    const displayY = (signature.normY || (signature.y / canvas.height)) * displayHeight;
+                    this._showPlacementMarkers(displayX, displayY, signature.id);
+                    console.log('placementMarkers: expected display coords =', Math.round(displayX), Math.round(displayY));
+                }
+            } catch (markerErr) {
+                console.warn('Error mostrando marcadores de posicion:', markerErr);
+            }
             this.renderSignaturesList();
             
             // Mostrar notificación

@@ -108,7 +108,7 @@
         border: 2px solid #e1e5e9;
         border-radius: 8px;
         font-size: 16px;
-        transition: all 0.3s;
+        transition: box-shadow 0.2s ease;
         background: white;
     }
 
@@ -4453,6 +4453,31 @@
     .document-signature::after {
         display: block;
     }
+}
+
+/* Markers temporales para depuración de colocación de firmas */
+.placement-marker {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 9999;
+    box-shadow: 0 0 6px rgba(0,0,0,0.35);
+}
+.placement-marker.expected { background: rgba(0,200,0,0.95); }
+.placement-marker.actual { background: rgba(200,0,0,0.95); }
+.placement-marker-label {
+    position: absolute;
+    background: rgba(0,0,0,0.8);
+    color: #fff;
+    padding: 3px 6px;
+    font-size: 11px;
+    border-radius: 4px;
+    pointer-events: none;
+    transform: translate(-50%, -120%);
+    z-index: 10000;
+    white-space: nowrap;
 }
 
 /* =========================================== */
