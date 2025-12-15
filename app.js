@@ -58,10 +58,11 @@ class SupabaseStorageService {
                     const savedSigs = DocumentService.documentSignatures || [];
                     if (savedSigs.length > 0) {
                         console.log('combineWithPDF: usando fallback con DocumentService.documentSignatures =', savedSigs.length);
-                        // displayCanvas puede no existir si el documento no está mostrado, usar atributos
+                        // displayCanvas puede no existir si el documento no está mostrado, usar bounding rect si está disponible
                         const displayCanvasAttr = document.getElementById('documentCanvas');
-                        const docCanvasPixelWidth = displayCanvasAttr ? displayCanvasAttr.width : canvas.width;
-                        const docCanvasPixelHeight = displayCanvasAttr ? displayCanvasAttr.height : canvas.height;
+                        const displayRectAttr = displayCanvasAttr ? displayCanvasAttr.getBoundingClientRect() : null;
+                        const docCanvasPixelWidth = displayRectAttr ? displayRectAttr.width : (displayCanvasAttr ? displayCanvasAttr.width : canvas.width);
+                        const docCanvasPixelHeight = displayRectAttr ? displayRectAttr.height : (displayCanvasAttr ? displayCanvasAttr.height : canvas.height);
                         const scaleXAttr = canvas.width / docCanvasPixelWidth;
                         const scaleYAttr = canvas.height / docCanvasPixelHeight;
 
@@ -6723,8 +6724,11 @@ class DocumentExportService {
 
                     // Dibujar firmas que correspondan a esta página
                     if (displayCanvas && signatureLayer) {
-                        const viewerPixelWidth = displayCanvas.width || canvas.width;
-                        const viewerPixelHeight = displayCanvas.height || canvas.height;
+                        // Usar getBoundingClientRect() para obtener el tamaño visual
+                        // (puede estar escalado por CSS transform o zoom del navegador)
+                        const displayRect = displayCanvas.getBoundingClientRect();
+                        const viewerPixelWidth = displayRect.width || canvas.width;
+                        const viewerPixelHeight = displayRect.height || canvas.height;
 
                         const scaleFactorX = canvas.width / viewerPixelWidth;
                         const scaleFactorY = canvas.height / viewerPixelHeight;
@@ -6803,8 +6807,10 @@ class DocumentExportService {
                 if (!displayCanvas || !signatureLayer) {
                     console.warn('combineWithImage: canvas o signatureLayer no encontrados');
                 } else {
-                    const viewerPixelWidth = displayCanvas.width || canvas.width;
-                    const viewerPixelHeight = displayCanvas.height || canvas.height;
+                    // Usar el tamaño visual actual del canvas (bounding rect)
+                    const displayRect = displayCanvas.getBoundingClientRect();
+                    const viewerPixelWidth = displayRect.width || canvas.width;
+                    const viewerPixelHeight = displayRect.height || canvas.height;
 
                     const scaleFactorX = canvas.width / viewerPixelWidth;
                     const scaleFactorY = canvas.height / viewerPixelHeight;
