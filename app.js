@@ -6088,6 +6088,59 @@ class DocumentService {
         }
     }
 
+    // Mostrar preview de export: dibujar rectángulos en la capa indicando
+    // dónde combineWithPDF dibujará cada firma. Útil para comparar antes
+    // de descargar el PDF final.
+    static _showExportPreview(signatures, displayRect) {
+        try {
+            const signatureLayer = document.getElementById('signatureLayer');
+            const canvas = document.getElementById('documentCanvas');
+            if (!signatureLayer || !canvas) return;
+
+            // Limpiar previos
+            const existing = signatureLayer.querySelectorAll('.export-preview-box');
+            existing.forEach(e => e.remove());
+
+            const viewerPixelWidth = displayRect.width;
+            const viewerPixelHeight = displayRect.height;
+
+            signatures.forEach(s => {
+                try {
+                    const relX = (typeof s.normX === 'number') ? s.normX : (s.x / canvas.width);
+                    const relY = (typeof s.normY === 'number') ? s.normY : (s.y / canvas.height);
+                    const relW = (typeof s.normWidth === 'number') ? s.normWidth : (s.width / canvas.width);
+                    const relH = (typeof s.normHeight === 'number') ? s.normHeight : (s.height / canvas.height);
+
+                    const left = relX * viewerPixelWidth;
+                    const top = relY * viewerPixelHeight;
+                    const w = relW * viewerPixelWidth;
+                    const h = relH * viewerPixelHeight;
+
+                    const box = document.createElement('div');
+                    box.className = 'export-preview-box';
+                    box.style.left = Math.round(left) + 'px';
+                    box.style.top = Math.round(top) + 'px';
+                    box.style.width = Math.max(2, Math.round(w)) + 'px';
+                    box.style.height = Math.max(2, Math.round(h)) + 'px';
+                    box.dataset.sig = s.id;
+                    signatureLayer.appendChild(box);
+                } catch (e) {
+                    console.warn('Error al construir export preview para', s.id, e);
+                }
+            });
+
+            // Auto remover después de 4s
+            setTimeout(() => {
+                try {
+                    const all = signatureLayer.querySelectorAll('.export-preview-box');
+                    all.forEach(a => a.remove());
+                } catch (e) { /* noop */ }
+            }, 4000);
+        } catch (err) {
+            console.warn('Error _showExportPreview:', err);
+        }
+    }
+
     // ==========================
     // Paginación de PDF
     // ==========================
@@ -6897,6 +6950,13 @@ class DocumentExportService {
                         // Seleccionar firmas del documento que tienen page == p (o undefined->1)
                         const signatures = (DocumentService.documentSignatures || []).filter(s => (s.page || 1) === p);
                         console.log(`combineWithPDF: renderizando página ${p}, firmas = ${signatures.length}`, { scaleFactorX, scaleFactorY });
+
+                        // Mostrar vista previa en la UI de dónde se dibujarán las firmas en el PDF
+                        try {
+                            this._showExportPreview(signatures, displayRect);
+                        } catch (previewErr) {
+                            console.warn('Error mostrando export preview:', previewErr);
+                        }
 
                         for (const s of signatures) {
                             try {

@@ -5465,3 +5465,12 @@
     80% { opacity: 1; transform: translateX(-50%) translateY(0); }
     100% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
 }
+
+/* Export preview box (azul) para mostrar dónde se dibujará la firma en el PDF */
+.export-preview-box {
+    position: absolute;
+    border: 2px dashed rgba(30,144,255,0.9);
+    background: rgba(30,144,255,0.06);
+    z-index: 9998;
+    pointer-events: none;
+}
