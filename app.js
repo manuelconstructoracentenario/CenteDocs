@@ -5988,6 +5988,15 @@ class DocumentService {
                 signatureElement.style.width = scaledWidth + 'px';
                 signatureElement.style.height = scaledHeight + 'px';
                 console.log('repositionSignaturesForZoom:', signature.id, 'scaled left/top/wh(px)=', Math.round(scaledX), Math.round(scaledY), Math.round(scaledWidth), Math.round(scaledHeight));
+                // Actualizar rect de overlay para debug (posiciones absolutas)
+                setTimeout(() => {
+                    try {
+                        const rect = signatureElement.getBoundingClientRect();
+                        signature.debug = signature.debug || {};
+                        signature.debug.overlayRect = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+                        this._logDebug('reposition.overlayRect', { id: signature.id, overlayRect: signature.debug.overlayRect });
+                    } catch (e) { /* noop */ }
+                }, 30);
             }
         });
     }
@@ -6242,6 +6251,15 @@ class DocumentService {
             signatureElement.style.width = w + 'px';
             signatureElement.style.height = h + 'px';
             console.log('renderOverlay: sig', signature.id, 'left/top/wh(px)=', Math.round(left), Math.round(top), Math.round(w), Math.round(h), 'usingNorm=', typeof signature.normX === 'number');
+            // Capturar rect del overlay para debug (puede cambiar tras repaint)
+            setTimeout(() => {
+                try {
+                    const rect = signatureElement.getBoundingClientRect();
+                    signature.debug = signature.debug || {};
+                    signature.debug.overlayRect = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+                    this._logDebug('signature.overlayRect', { id: signature.id, overlayRect: signature.debug.overlayRect });
+                } catch (e) { /* noop */ }
+            }, 40);
         } else {
             signatureElement.style.left = signature.x + 'px';
             signatureElement.style.top = signature.y + 'px';
@@ -6352,6 +6370,7 @@ class DocumentService {
             
             console.log(`%c📍 Display coords: (${Math.round(displayX)}, ${Math.round(displayY)})`, 'color: #4caf50');
             console.log(`%c📍 Pixel coords: (${Math.round(x)}, ${Math.round(y)})`, 'color: #4caf50; font-weight: bold');
+            this._logDebug('input.click', { displayX: Math.round(displayX), displayY: Math.round(displayY), x: Math.round(x), y: Math.round(y), normX: normX.toFixed(4), normY: normY.toFixed(4) });
             
             // Prevenir que se propague
             e.stopPropagation();
@@ -6421,6 +6440,7 @@ class DocumentService {
             
             console.log(`%c📍 Display coords: (${Math.round(displayX)}, ${Math.round(displayY)})`, 'color: #ff9800');
             console.log(`%c📍 Pixel coords: (${Math.round(x)}, ${Math.round(y)})`, 'color: #ff9800; font-weight: bold');
+            this._logDebug('input.touch', { displayX: Math.round(displayX), displayY: Math.round(displayY), x: Math.round(x), y: Math.round(y), normX: normX.toFixed(4), normY: normY.toFixed(4) });
             
             // Prevenir scroll
             e.stopPropagation();
@@ -6494,11 +6514,98 @@ class DocumentService {
         this.canvasClickHandler = null;
     }
 
+    // ==========================
+    // Consola de depuración in-app
+    // ==========================
+    static _initDebugConsole() {
+        if (document.getElementById('debugConsole')) return;
+        const panel = document.createElement('div');
+        panel.id = 'debugConsole';
+        panel.innerHTML = `
+            <div class="debug-header">
+                <span>Logs</span>
+                <div class="debug-actions">
+                    <button id="dbgCopyBtn">Copiar</button>
+                    <label><input type="checkbox" id="dbgCompToggle"> Compensar X</label>
+                    <input id="dbgCompPct" type="number" value="0" min="0" max="20" step="0.1" title="Porcentaje de compensación horizontal (ej: 1 = 1%)">%
+                    <button id="dbgClearBtn">Limpiar</button>
+                </div>
+            </div>
+            <div id="debugLogArea"></div>
+        `;
+        document.body.appendChild(panel);
+
+        document.getElementById('dbgCopyBtn').addEventListener('click', () => this._copyDebugLogs());
+        document.getElementById('dbgClearBtn').addEventListener('click', () => this._clearDebugLogs());
+    }
+
+    static _logDebug(msg, obj = null) {
+        try {
+            if (!this._debugLogs) this._debugLogs = [];
+            const entry = { t: Date.now(), msg: String(msg), obj };
+            this._debugLogs.push(entry);
+
+            // Keep last 200
+            if (this._debugLogs.length > 200) this._debugLogs.shift();
+
+            // Ensure console is present
+            this._initDebugConsole();
+            const area = document.getElementById('debugLogArea');
+            if (!area) return;
+            const el = document.createElement('div');
+            el.className = 'debug-line';
+            const time = new Date(entry.t).toLocaleTimeString();
+            el.textContent = `${time} — ${entry.msg}`;
+            if (entry.obj) {
+                const pre = document.createElement('pre');
+                pre.className = 'debug-obj';
+                try { pre.textContent = JSON.stringify(entry.obj, null, 2); } catch(e){ pre.textContent = String(entry.obj); }
+                el.appendChild(pre);
+            }
+            area.appendChild(el);
+            // Keep scroll to bottom
+            area.scrollTop = area.scrollHeight;
+        } catch (e) {
+            console.warn('Error _logDebug', e);
+        }
+    }
+
+    static _copyDebugLogs() {
+        try {
+            if (!this._debugLogs) return;
+            const text = this._debugLogs.map(e => `${new Date(e.t).toLocaleString()} - ${e.msg}${e.obj ? '\n'+JSON.stringify(e.obj,null,2) : ''}`).join('\n\n');
+            navigator.clipboard.writeText(text).then(() => {
+                showNotification('Logs copiados al portapapeles', 'success');
+            }).catch(() => {
+                showNotification('No se pudo copiar automáticamente. Selecciona y copia manualmente.', 'warning');
+            });
+        } catch (e) { console.warn('Error copiar logs', e); }
+    }
+
+    static _clearDebugLogs() {
+        try {
+            this._debugLogs = [];
+            const area = document.getElementById('debugLogArea');
+            if (area) area.innerHTML = '';
+            showNotification('Logs limpiados', 'info');
+        } catch (e) { console.warn('Error limpiar logs', e); }
+    }
+
+    static _getCompensationPercent() {
+        try {
+            const toggle = document.getElementById('dbgCompToggle');
+            if (!toggle || !toggle.checked) return 0;
+            const val = parseFloat(document.getElementById('dbgCompPct').value || '0');
+            return isNaN(val) ? 0 : val / 100; // convert percent to fraction
+        } catch (e) { return 0; }
+    }
+
     // ===========================================
     // MODIFICAR addSignatureToDocument para modo automático inteligente
     // ===========================================
     static async addSignatureToDocument(manualX = null, manualY = null, manualNormX = null, manualNormY = null) {
         console.log('🟢 addSignatureToDocument llamado con:', { manualX, manualY, manualNormX, manualNormY });
+        this._logDebug('addSignatureToDocument.called', { manualX, manualY, manualNormX, manualNormY });
         
         if (!this.currentSignature) {
             console.warn('⚠️ No hay firma seleccionada');
@@ -6614,6 +6721,24 @@ class DocumentService {
                 confidence: position.confidence,
                 fieldType: position.fieldType
             };
+
+            // Guardar información de depuración por firma
+            signature.debug = {
+                placedDisplay: {
+                    displayX: (manualNormX || signature.normX) ? null : null
+                },
+                initial: {
+                    x: position.x,
+                    y: position.y,
+                    width: width,
+                    height: height,
+                    normX: signature.normX,
+                    normY: signature.normY,
+                    normWidth: signature.normWidth,
+                    normHeight: signature.normHeight
+                }
+            };
+            this._logDebug('signature.created', { id: signature.id, placedBy: signature.placedBy, normX: signature.normX, normY: signature.normY });
             
             // Agregar firma a la lista
             this.documentSignatures.push(signature);
@@ -6879,6 +7004,9 @@ window.addEventListener('resize', () => {
     }, 250);
 });
 
+// Inicializar consola de depuración in-app para capturar logs en móvil
+try { DocumentService._initDebugConsole(); DocumentService._logDebug('debug.console.ready'); } catch(e) { console.warn('No se pudo iniciar la consola debug in-app', e); }
+
 // Sistema de Exportación de Documentos con Firmas
 class DocumentExportService {
     static async combineSignaturesWithDocument() {
@@ -6969,17 +7097,26 @@ class DocumentExportService {
                                 let useOverlay = false;
                                 let overlayNormX, overlayNormY, overlayNormW, overlayNormH;
                                 try {
-                                    const sigEl = document.querySelector(`[data-signature-id="${s.id}"]`);
-                                    if (sigEl) {
-                                        const sigRect = sigEl.getBoundingClientRect();
-                                        const dispRect = displayRect;
-                                        if (dispRect && dispRect.width > 0 && dispRect.height > 0) {
+                                    const dispRect = displayRect;
+                                    // Preferir rect guardado en el momento de colocación (más estable)
+                                    if (s.debug && s.debug.overlayRect && dispRect && dispRect.width > 0 && dispRect.height > 0) {
+                                        const r = s.debug.overlayRect;
+                                        overlayNormX = (r.left - dispRect.left) / dispRect.width;
+                                        overlayNormY = (r.top - dispRect.top) / dispRect.height;
+                                        overlayNormW = r.width / dispRect.width;
+                                        overlayNormH = r.height / dispRect.height;
+                                        useOverlay = true;
+                                        this._logDebug('combineWithPDF.overlayCoords.usedSaved', { id: s.id, overlayNormX: overlayNormX.toFixed(4), overlayNormY: overlayNormY.toFixed(4) });
+                                    } else {
+                                        const sigEl = document.querySelector(`[data-signature-id="${s.id}"]`);
+                                        if (sigEl && dispRect && dispRect.width > 0 && dispRect.height > 0) {
+                                            const sigRect = sigEl.getBoundingClientRect();
                                             overlayNormX = (sigRect.left - dispRect.left) / dispRect.width;
                                             overlayNormY = (sigRect.top - dispRect.top) / dispRect.height;
                                             overlayNormW = sigRect.width / dispRect.width;
                                             overlayNormH = sigRect.height / dispRect.height;
                                             useOverlay = true;
-                                            console.log('combineWithPDF: usando overlay coords para', s.id, { overlayNormX: overlayNormX.toFixed(4), overlayNormY: overlayNormY.toFixed(4), overlayNormW: overlayNormW.toFixed(4), overlayNormH: overlayNormH.toFixed(4) });
+                                            this._logDebug('combineWithPDF.overlayCoords.usedCurrent', { id: s.id, overlayNormX: overlayNormX.toFixed(4), overlayNormY: overlayNormY.toFixed(4) });
                                         }
                                     }
                                 } catch (overlayErr) {
@@ -6996,9 +7133,25 @@ class DocumentExportService {
                                 const width = finalNormW * canvas.width;
                                 const height = finalNormH * canvas.height;
 
+                                // Aplicar compensación horizontal si el usuario la activó (útil para pruebas en móvil)
+                                const compPct = this._getCompensationPercent();
+                                if (compPct && compPct > 0) {
+                                    const compPx = Math.round(compPct * canvas.width);
+                                    this._logDebug('apply.compensation', { id: s.id, compPct, compPx });
+                                    // Restar la compensación en X (mover a la izquierda)
+                                    x -= compPx;
+                                }
+
+                                // Guardar info de export usado para debugging
+                                try {
+                                    s.debug = s.debug || {};
+                                    s.debug.export = { finalNormX, finalNormY, finalNormW, finalNormH, x, y, width, height };
+                                } catch (e) { /* noop */ }
+
                                 ctx.imageSmoothingEnabled = true;
                                 ctx.imageSmoothingQuality = 'high';
                                 console.log('combineWithPDF: dibujando firma', { id: s.id, page: p, x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height), useNorm: typeof s.normX === 'number' });
+                                this._logDebug('combineWithPDF.draw', { id: s.id, page: p, x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
                                 ctx.drawImage(img, x, y, width, height);
                             } catch (innerErr) {
                                 console.error('combineWithPDF: error dibujando firma fallback', innerErr, s);
@@ -7074,14 +7227,24 @@ class DocumentExportService {
                             await this.waitForImageLoad(imgSignature);
 
                             // Prefer normalized coordinates (norm*) si están disponibles
-                            const x = (typeof s.normX === 'number' ? s.normX * canvas.width : (s.x || 0) * scaleFactorX);
-                            const y = (typeof s.normY === 'number' ? s.normY * canvas.height : (s.y || 0) * scaleFactorY);
-                            const width = (typeof s.normWidth === 'number' ? s.normWidth * canvas.width : (s.width || imgSignature.naturalWidth) * scaleFactorX);
-                            const height = (typeof s.normHeight === 'number' ? s.normHeight * canvas.height : (s.height || imgSignature.naturalHeight) * scaleFactorY);
+                            let x = (typeof s.normX === 'number' ? s.normX * canvas.width : (s.x || 0) * scaleFactorX);
+                            let y = (typeof s.normY === 'number' ? s.normY * canvas.height : (s.y || 0) * scaleFactorY);
+                            let width = (typeof s.normWidth === 'number' ? s.normWidth * canvas.width : (s.width || imgSignature.naturalWidth) * scaleFactorX);
+                            let height = (typeof s.normHeight === 'number' ? s.normHeight * canvas.height : (s.height || imgSignature.naturalHeight) * scaleFactorY);
+
+                            const compPct = this._getCompensationPercent();
+                            if (compPct && compPct > 0) {
+                                const compPx = Math.round(compPct * canvas.width);
+                                this._logDebug('apply.compensation.image', { id: s.id, compPct, compPx });
+                                x -= compPx;
+                            }
+
+                            try { s.debug = s.debug || {}; s.debug.exportImage = { x, y, width, height }; } catch(e){}
 
                             ctx.imageSmoothingEnabled = true;
                             ctx.imageSmoothingQuality = 'high';
                             console.log('combineWithImage: dibujando firma', { id: s.id, page: DocumentService.currentPage, x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height), useNorm: typeof s.normX === 'number' });
+                            this._logDebug('combineWithImage.draw', { id: s.id, page: DocumentService.currentPage, x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
                             try {
                                 ctx.drawImage(imgSignature, x, y, width, height);
                             } catch (drawErr) {

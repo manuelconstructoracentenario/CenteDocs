@@ -5474,3 +5474,35 @@
     z-index: 9998;
     pointer-events: none;
 }
+
+/* Debug console in-app */
+#debugConsole {
+    position: fixed;
+    right: 12px;
+    bottom: 12px;
+    width: 320px;
+    max-height: 45vh;
+    background: rgba(0,0,0,0.75);
+    color: #fff;
+    font-size: 12px;
+    border-radius: 8px;
+    z-index: 10050;
+    overflow: hidden;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+}
+#debugConsole .debug-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:6px 8px;
+    background: rgba(255,255,255,0.04);
+}
+#debugConsole .debug-actions{display:flex;gap:6px;align-items:center}
+#debugConsole #debugLogArea{
+    padding:8px;
+    overflow:auto;
+    max-height: 36vh;
+}
+.debug-line{margin-bottom:6px;border-bottom:1px dashed rgba(255,255,255,0.03);padding-bottom:4px}
+.debug-obj{white-space:pre-wrap;color:#dfefff;background:rgba(255,255,255,0.02);padding:6px;border-radius:4px;margin-top:6px}
+
