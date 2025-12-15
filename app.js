@@ -6115,15 +6115,24 @@ class DocumentService {
 
             signatures.forEach(s => {
                 try {
-                    const relX = (typeof s.normX === 'number') ? s.normX : (s.x / canvas.width);
-                    const relY = (typeof s.normY === 'number') ? s.normY : (s.y / canvas.height);
-                    const relW = (typeof s.normWidth === 'number') ? s.normWidth : (s.width / canvas.width);
-                    const relH = (typeof s.normHeight === 'number') ? s.normHeight : (s.height / canvas.height);
-
-                    const left = relX * viewerPixelWidth;
-                    const top = relY * viewerPixelHeight;
-                    const w = relW * viewerPixelWidth;
-                    const h = relH * viewerPixelHeight;
+                    // Si existe rect guardado (posición visual), úsalo para la preview
+                    let left, top, w, h;
+                    if (s.debug && s.debug.overlayRect) {
+                        const r = s.debug.overlayRect;
+                        left = r.left - displayRect.left;
+                        top = r.top - displayRect.top;
+                        w = r.width;
+                        h = r.height;
+                    } else {
+                        const relX = (typeof s.normX === 'number') ? s.normX : (s.x / canvas.width);
+                        const relY = (typeof s.normY === 'number') ? s.normY : (s.y / canvas.height);
+                        const relW = (typeof s.normWidth === 'number') ? s.normWidth : (s.width / canvas.width);
+                        const relH = (typeof s.normHeight === 'number') ? s.normHeight : (s.height / canvas.height);
+                        left = relX * viewerPixelWidth;
+                        top = relY * viewerPixelHeight;
+                        w = relW * viewerPixelWidth;
+                        h = relH * viewerPixelHeight;
+                    }
 
                     const box = document.createElement('div');
                     box.className = 'export-preview-box';
@@ -7128,10 +7137,33 @@ class DocumentExportService {
                                 const finalNormW = useOverlay ? overlayNormW : (typeof s.normWidth === 'number' ? s.normWidth : (s.width || img.naturalWidth) / canvas.width);
                                 const finalNormH = useOverlay ? overlayNormH : (typeof s.normHeight === 'number' ? s.normHeight : (s.height || img.naturalHeight) / canvas.height);
 
-                                const x = finalNormX * canvas.width;
-                                const y = finalNormY * canvas.height;
-                                const width = finalNormW * canvas.width;
-                                const height = finalNormH * canvas.height;
+                                let x = finalNormX * canvas.width;
+                                let y = finalNormY * canvas.height;
+                                let width = finalNormW * canvas.width;
+                                let height = finalNormH * canvas.height;
+
+                                // Asegurar tamaños mínimos
+                                width = Math.max(1, Math.round(width));
+                                height = Math.max(1, Math.round(height));
+
+                                // Si las coordenadas resultan estar completamente fuera del canvas
+                                // (ocurre si overlayRect está relative a otro contexto o hubo un scroll),
+                                // volver a intentar con las coordenadas normalizadas guardadas o con
+                                // la posición en px registrada previamente.
+                                const isOutside = (x + width <= 0) || (y + height <= 0) || (x >= canvas.width) || (y >= canvas.height);
+                                if (isOutside) {
+                                    this._logDebug('combineWithPDF.fallbackOutside', { id: s.id, x, y, width, height, canvasW: canvas.width, canvasH: canvas.height });
+                                    // Fallback a norm guardadas o a posiciones px escaladas
+                                    const fallbackNormX = (typeof s.normX === 'number') ? s.normX : ((s.x || 0) / canvas.width);
+                                    const fallbackNormY = (typeof s.normY === 'number') ? s.normY : ((s.y || 0) / canvas.height);
+                                    const fallbackNormW = (typeof s.normWidth === 'number') ? s.normWidth : ((s.width || img.naturalWidth) / canvas.width);
+                                    const fallbackNormH = (typeof s.normHeight === 'number') ? s.normHeight : ((s.height || img.naturalHeight) / canvas.height);
+                                    x = Math.round(fallbackNormX * canvas.width);
+                                    y = Math.round(fallbackNormY * canvas.height);
+                                    width = Math.max(1, Math.round(fallbackNormW * canvas.width));
+                                    height = Math.max(1, Math.round(fallbackNormH * canvas.height));
+                                    this._logDebug('combineWithPDF.fallbackApplied', { id: s.id, x, y, width, height });
+                                }
 
                                 // Aplicar compensación horizontal si el usuario la activó (útil para pruebas en móvil)
                                 const compPct = this._getCompensationPercent();
@@ -7243,6 +7275,21 @@ class DocumentExportService {
 
                             ctx.imageSmoothingEnabled = true;
                             ctx.imageSmoothingQuality = 'high';
+                            // Comprobar si está fuera del canvas y fallback si es necesario
+                            const outOfBounds = (x + width <= 0) || (y + height <= 0) || (x >= canvas.width) || (y >= canvas.height);
+                            if (outOfBounds) {
+                                this._logDebug('combineWithImage.fallbackOutside', { id: s.id, x, y, width, height, canvasW: canvas.width, canvasH: canvas.height });
+                                const fallbackNormX = (typeof s.normX === 'number') ? s.normX : ((s.x || 0) / canvas.width);
+                                const fallbackNormY = (typeof s.normY === 'number') ? s.normY : ((s.y || 0) / canvas.height);
+                                const fallbackNormW = (typeof s.normWidth === 'number') ? s.normWidth : ((s.width || imgSignature.naturalWidth) / canvas.width);
+                                const fallbackNormH = (typeof s.normHeight === 'number') ? s.normHeight : ((s.height || imgSignature.naturalHeight) / canvas.height);
+                                x = Math.round(fallbackNormX * canvas.width);
+                                y = Math.round(fallbackNormY * canvas.height);
+                                width = Math.max(1, Math.round(fallbackNormW * canvas.width));
+                                height = Math.max(1, Math.round(fallbackNormH * canvas.height));
+                                this._logDebug('combineWithImage.fallbackApplied', { id: s.id, x, y, width, height });
+                            }
+
                             console.log('combineWithImage: dibujando firma', { id: s.id, page: DocumentService.currentPage, x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height), useNorm: typeof s.normX === 'number' });
                             this._logDebug('combineWithImage.draw', { id: s.id, page: DocumentService.currentPage, x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
                             try {
