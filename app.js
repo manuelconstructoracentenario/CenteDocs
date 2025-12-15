@@ -6964,11 +6964,37 @@ class DocumentExportService {
                                 img.src = s.data;
                                 await this.waitForImageLoad(img);
 
-                                // Usar coordenadas normalizadas si existen (más robusto cuando hay zoom/transform)
-                                const x = (typeof s.normX === 'number' ? s.normX * canvas.width : (s.x || 0) * scaleFactorX);
-                                const y = (typeof s.normY === 'number' ? s.normY * canvas.height : (s.y || 0) * scaleFactorY);
-                                const width = (typeof s.normWidth === 'number' ? s.normWidth * canvas.width : (s.width || img.naturalWidth) * scaleFactorX);
-                                const height = (typeof s.normHeight === 'number' ? s.normHeight * canvas.height : (s.height || img.naturalHeight) * scaleFactorY);
+                                // Preferir usar la posición del overlay visible (si existe) porque
+                                // en móviles la posición visual puede desplazarse por UI del navegador.
+                                let useOverlay = false;
+                                let overlayNormX, overlayNormY, overlayNormW, overlayNormH;
+                                try {
+                                    const sigEl = document.querySelector(`[data-signature-id="${s.id}"]`);
+                                    if (sigEl) {
+                                        const sigRect = sigEl.getBoundingClientRect();
+                                        const dispRect = displayRect;
+                                        if (dispRect && dispRect.width > 0 && dispRect.height > 0) {
+                                            overlayNormX = (sigRect.left - dispRect.left) / dispRect.width;
+                                            overlayNormY = (sigRect.top - dispRect.top) / dispRect.height;
+                                            overlayNormW = sigRect.width / dispRect.width;
+                                            overlayNormH = sigRect.height / dispRect.height;
+                                            useOverlay = true;
+                                            console.log('combineWithPDF: usando overlay coords para', s.id, { overlayNormX: overlayNormX.toFixed(4), overlayNormY: overlayNormY.toFixed(4), overlayNormW: overlayNormW.toFixed(4), overlayNormH: overlayNormH.toFixed(4) });
+                                        }
+                                    }
+                                } catch (overlayErr) {
+                                    console.warn('combineWithPDF: error al leer overlay coords', overlayErr);
+                                }
+
+                                const finalNormX = useOverlay ? overlayNormX : (typeof s.normX === 'number' ? s.normX : (s.x || 0) / canvas.width);
+                                const finalNormY = useOverlay ? overlayNormY : (typeof s.normY === 'number' ? s.normY : (s.y || 0) / canvas.height);
+                                const finalNormW = useOverlay ? overlayNormW : (typeof s.normWidth === 'number' ? s.normWidth : (s.width || img.naturalWidth) / canvas.width);
+                                const finalNormH = useOverlay ? overlayNormH : (typeof s.normHeight === 'number' ? s.normHeight : (s.height || img.naturalHeight) / canvas.height);
+
+                                const x = finalNormX * canvas.width;
+                                const y = finalNormY * canvas.height;
+                                const width = finalNormW * canvas.width;
+                                const height = finalNormH * canvas.height;
 
                                 ctx.imageSmoothingEnabled = true;
                                 ctx.imageSmoothingQuality = 'high';
