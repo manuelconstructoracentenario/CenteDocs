@@ -6222,6 +6222,8 @@ class DocumentService {
             const displayY = e.clientY - rect.top;
             const x = displayX * scaleX;
             const y = displayY * scaleY;
+            const normX = rect.width > 0 ? (displayX / rect.width) : 0;
+            const normY = rect.height > 0 ? (displayY / rect.height) : 0;
             
             console.log(`%c📍 Display coords: (${Math.round(displayX)}, ${Math.round(displayY)})`, 'color: #4caf50');
             console.log(`%c📍 Pixel coords: (${Math.round(x)}, ${Math.round(y)})`, 'color: #4caf50; font-weight: bold');
@@ -6243,8 +6245,8 @@ class DocumentService {
             
             // Agregar firma CON DELAY
             setTimeout(() => {
-                console.log(`%c📍 Llamando addSignatureToDocument con (${Math.round(x)}, ${Math.round(y)})`, 'color: #9c27b0; font-weight: bold');
-                this.addSignatureToDocument(x, y);
+                console.log(`%c📍 Llamando addSignatureToDocument con (${Math.round(x)}, ${Math.round(y)}) norm=(${normX.toFixed(4)},${normY.toFixed(4)})`, 'color: #9c27b0; font-weight: bold');
+                this.addSignatureToDocument(x, y, normX, normY);
             }, 50);
         };
         
@@ -6289,6 +6291,8 @@ class DocumentService {
             const displayY = touch.clientY - rect.top;
             const x = displayX * scaleX;
             const y = displayY * scaleY;
+            const normX = rect.width > 0 ? (displayX / rect.width) : 0;
+            const normY = rect.height > 0 ? (displayY / rect.height) : 0;
             
             console.log(`%c📍 Display coords: (${Math.round(displayX)}, ${Math.round(displayY)})`, 'color: #ff9800');
             console.log(`%c📍 Pixel coords: (${Math.round(x)}, ${Math.round(y)})`, 'color: #ff9800; font-weight: bold');
@@ -6310,8 +6314,8 @@ class DocumentService {
             
             // Agregar firma CON DELAY
             setTimeout(() => {
-                console.log(`%c📍 Llamando addSignatureToDocument con (${Math.round(x)}, ${Math.round(y)})`, 'color: #9c27b0; font-weight: bold');
-                this.addSignatureToDocument(x, y);
+                console.log(`%c📍 Llamando addSignatureToDocument con (${Math.round(x)}, ${Math.round(y)}) norm=(${normX.toFixed(4)},${normY.toFixed(4)})`, 'color: #9c27b0; font-weight: bold');
+                this.addSignatureToDocument(x, y, normX, normY);
             }, 50);
         };
         
@@ -6368,8 +6372,8 @@ class DocumentService {
     // ===========================================
     // MODIFICAR addSignatureToDocument para modo automático inteligente
     // ===========================================
-    static async addSignatureToDocument(manualX = null, manualY = null) {
-        console.log('🟢 addSignatureToDocument llamado con:', { manualX, manualY });
+    static async addSignatureToDocument(manualX = null, manualY = null, manualNormX = null, manualNormY = null) {
+        console.log('🟢 addSignatureToDocument llamado con:', { manualX, manualY, manualNormX, manualNormY });
         
         if (!this.currentSignature) {
             console.warn('⚠️ No hay firma seleccionada');
@@ -6386,8 +6390,20 @@ class DocumentService {
         try {
             let position;
             
-            // Si el usuario especificó una posición (clic/toque), usarla
-            if (manualX !== null && manualY !== null) {
+            // Si el usuario especificó una posición (clic/toque), usarla.
+            // Preferir coordenadas normalizadas si fueron pasadas (más robusto con zoom móvil/browser)
+            if (typeof manualNormX === 'number' && typeof manualNormY === 'number') {
+                const canvas = document.getElementById('documentCanvas');
+                const xPx = canvas ? (manualNormX * canvas.width) : (manualX || 0);
+                const yPx = canvas ? (manualNormY * canvas.height) : (manualY || 0);
+                console.log(`📍 Usando posición normalizada del usuario: norm=(${manualNormX.toFixed(4)}, ${manualNormY.toFixed(4)}) -> px=(${Math.round(xPx)}, ${Math.round(yPx)})`);
+                position = {
+                    x: xPx,
+                    y: yPx,
+                    fieldType: 'user_click',
+                    confidence: 1.0
+                };
+            } else if (manualX !== null && manualY !== null) {
                 console.log(`📍 Usando posición del usuario: (${Math.round(manualX)}, ${Math.round(manualY)})`);
                 position = {
                     x: manualX,
