@@ -4996,30 +4996,33 @@ class DocumentService {
             e.stopPropagation();
             
             if (e.touches.length === 1) {
-                // Usar e.target si es posible para detectar el handle con mayor precisión
-                let target = e.target;
-                let isHandle = false;
+                const touch = e.touches[0];
+                const touchX = touch.clientX;
+                const touchY = touch.clientY;
                 
-                // Verificar si el target es un handle o está dentro de uno
-                if (target && target.classList.contains('signature-handle')) {
-                    isHandle = true;
-                }
+                // Buscar handles cercanos (radio de 40px)
+                // Esto soluciona el problema de "dedo gordo" y z-index
+                const handles = element.querySelectorAll('.signature-handle');
+                let closestHandle = null;
+                let minDistance = 40; // Radio de búsqueda generoso
                 
-                // Fallback a elementFromPoint si e.target no capturó el handle
-                if (!isHandle) {
-                    const touch = e.touches[0];
-                    const pointTarget = document.elementFromPoint(touch.clientX, touch.clientY);
-                    if (pointTarget && pointTarget.classList.contains('signature-handle')) {
-                        target = pointTarget;
-                        isHandle = true;
+                handles.forEach(handle => {
+                    const rect = handle.getBoundingClientRect();
+                    const centerX = rect.left + rect.width / 2;
+                    const centerY = rect.top + rect.height / 2;
+                    const distance = Math.hypot(touchX - centerX, touchY - centerY);
+                    
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        closestHandle = handle;
                     }
-                }
+                });
 
-                if (isHandle) {
-                    // Redimensionar
-                    this.startResizeTouch(e, element, signatureData, target);
+                if (closestHandle) {
+                    // Redimensionar usando el handle encontrado
+                    this.startResizeTouch(e, element, signatureData, closestHandle);
                 } else {
-                    // Arrastrar
+                    // Arrastrar si no hay handle cerca
                     this.startDragTouch(e, element, signatureData);
                 }
             }

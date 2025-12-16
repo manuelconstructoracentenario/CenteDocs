@@ -5488,6 +5488,34 @@ body.signature-mode-active #documentContainer {
 }
 
 @keyframes fadeInOut {
+    0% { opacity: 0; transform: translate(-50%, -20px); }
+    20% { opacity: 1; transform: translate(-50%, -30px); }
+    80% { opacity: 1; transform: translate(-50%, -30px); }
+    100% { opacity: 0; transform: translate(-50%, -40px); }
+}
+
+/* =========================================== */
+/* MEJORA DE ACCESIBILIDAD PARA MÓVILES */
+/* =========================================== */
+
+/* Aumentar área táctil de los manejadores de redimensión sin afectar visualmente */
+.signature-handle::after {
+    content: '';
+    position: absolute;
+    top: -20px;
+    left: -20px;
+    right: -20px;
+    bottom: -20px;
+    border-radius: 50%;
+    z-index: 10;
+}
+
+/* Asegurar que los manejadores estén por encima de la firma */
+.signature-handle {
+    z-index: 20 !important;
+}
+
+@keyframes fadeInOut {
     0% { opacity: 0; transform: translateX(-50%) translateY(10px); }
     20% { opacity: 1; transform: translateX(-50%) translateY(0); }
     80% { opacity: 1; transform: translateX(-50%) translateY(0); }
