@@ -5543,3 +5543,18 @@ body.signature-mode-active #documentContainer {
     pointer-events: none;
 }
 
+.signature-handle::after {
+    content: '';
+    position: absolute;
+    top: -15px;
+    left: -15px;
+    right: -15px;
+    bottom: -15px;
+    border-radius: 50%;
+    z-index: 10;
+}
+
+/* Asegurar que los manejadores estén por encima de la firma */
+.signature-handle {
+    z-index: 20;
+}

@@ -4996,12 +4996,28 @@ class DocumentService {
             e.stopPropagation();
             
             if (e.touches.length === 1) {
-                const touch = e.touches[0];
-                const target = document.elementFromPoint(touch.clientX, touch.clientY);
+                // Usar e.target si es posible para detectar el handle con mayor precisión
+                let target = e.target;
+                let isHandle = false;
                 
+                // Verificar si el target es un handle o está dentro de uno
                 if (target && target.classList.contains('signature-handle')) {
+                    isHandle = true;
+                }
+                
+                // Fallback a elementFromPoint si e.target no capturó el handle
+                if (!isHandle) {
+                    const touch = e.touches[0];
+                    const pointTarget = document.elementFromPoint(touch.clientX, touch.clientY);
+                    if (pointTarget && pointTarget.classList.contains('signature-handle')) {
+                        target = pointTarget;
+                        isHandle = true;
+                    }
+                }
+
+                if (isHandle) {
                     // Redimensionar
-                    this.startResizeTouch(e, element, signatureData);
+                    this.startResizeTouch(e, element, signatureData, target);
                 } else {
                     // Arrastrar
                     this.startDragTouch(e, element, signatureData);
