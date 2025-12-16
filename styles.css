@@ -2503,8 +2503,7 @@
         position: absolute;
         top: 0;
         left: 0;
-        /* Allow child signature elements to receive touch events */
-        pointer-events: auto;
+        pointer-events: none;
     }
 
     .document-signature {
