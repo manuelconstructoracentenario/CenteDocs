@@ -23,6 +23,7 @@
 - ✅ **Firma Digital Múltiple**: Múltiples usuarios pueden firmar el mismo documento secuencialmente
 - ✅ **Navegación Multipágina**: Soporta PDFs con múltiples páginas; navega entre ellas con botones o teclado
 - ✅ **Firmas Interactivas**: Coloca, mueve y redimensiona firmas en cualquier posición del documento
+- ✅ **Experiencia Móvil Mejorada**: Controles táctiles optimizados para celulares y tablets
 - ✅ **Firma Automática**: Sistema genera firmas automáticas o carga firmas digitales personalizadas
 - ✅ **Descarga de Documentos Firmados**: Exporta PDFs con todas las firmas integradas
 - ✅ **Historial de Actividad**: Registra quién firmó, cuándo y en qué página
@@ -65,7 +66,7 @@ Contraseña: ••••••••
 1. Abre el documento desde el selector
 2. Carga o genera tu firma en el panel **"Firma Digital"**
 3. Haz clic en **"Agregar Firma Automáticamente"**
-4. El sistema detectará automáticamente dónde colocar la firma
+4. El sistema detectará automáticamente el mejor espacio disponible (optimizado para firmas compactas)
 
 #### Opción B: Firma Manual
 1. Abre el documento
@@ -73,6 +74,12 @@ Contraseña: ••••••••
 3. Haz clic en **"Modo de Firma"** o directamente **"Agregar Firma"**
 4. **Haz clic/toca el lugar donde deseas colocar la firma**
 5. Ajusta el tamaño y posición usando los controles
+
+#### 📱 Uso en Dispositivos Móviles
+- **Mover**: Toca y arrastra la firma con un dedo
+- **Redimensionar**: Usa los círculos (manejadores) en las esquinas. Hemos mejorado la detección táctil para facilitar el agarre
+- **Eliminar**: Toca la "X" roja en la esquina superior derecha de la firma seleccionada
+- **Nota**: El sistema ajusta automáticamente el tamaño para mantener la legibilidad en pantallas pequeñas
 
 ### 4. Navegar en Documentos Multipágina
 
@@ -90,7 +97,9 @@ Contraseña: ••••••••
 
 1. Una vez hayas agregado todas las firmas
 2. Haz clic en **"Guardar"** en el panel de firmas
-3. El sistema generará un PDF con todas las firmas integradas
+3. El sistema procesará el documento:
+   - **Detección Inteligente de Orientación**: Ajusta automáticamente cada página (vertical u horizontal) para que no se corte contenido
+   - **Integración de Firmas**: Combina las firmas con el documento original en alta calidad
 4. Se guardará automáticamente en tu carpeta de "Documentos Firmados"
 
 ### 6. Descargar Documento
@@ -539,6 +548,13 @@ const rect = canvas.getBoundingClientRect();
 const displayX = event.clientX - rect.left;
 const displayY = event.clientY - rect.top;
 ```
+
+### "Dificultad para redimensionar en móvil"
+**Causa**: Precisión táctil en pantallas pequeñas.
+**Solución**:
+- Los puntos de control tienen un área de detección ampliada (40px) invisible.
+- Intenta tocar ligeramente fuera de la esquina visible de la firma.
+- Evita hacer zoom excesivo en la página completa mientras firmas.
 
 ### "¿Cómo debuggear?"
 1. Abre **DevTools** (F12)
