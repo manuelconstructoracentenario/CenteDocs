@@ -6832,6 +6832,9 @@ class DocumentExportService {
 
         try {
             if (DocumentService.currentDocument.type === 'application/pdf') {
+                if (window.PDFLib && typeof window.PDFLib.PDFDocument === 'function') {
+                    return await this.combineWithPDFDirect();
+                }
                 return await this.combineWithPDF();
             } else if (DocumentService.currentDocument.type.startsWith('image/')) {
                 return await this.combineWithImage();
@@ -6841,6 +6844,55 @@ class DocumentExportService {
         } catch (error) {
             console.error('Error al combinar firmas:', error);
             throw new Error('Error al combinar las firmas con el documento: ' + error.message);
+        }
+    }
+
+    static async combineWithPDFDirect() {
+        try {
+            const { PDFDocument } = window.PDFLib;
+            const response = await fetch(DocumentService.currentDocument.url, { cache: 'no-store' });
+            const originalPdfBytes = await response.arrayBuffer();
+            const pdfDoc = await PDFDocument.load(originalPdfBytes, { updateMetadata: false });
+            const pages = pdfDoc.getPages();
+            const displayCanvas = document.getElementById('documentCanvas');
+            const pixelWidth = displayCanvas?.width || pages[0]?.getSize()?.width || 1;
+            const pixelHeight = displayCanvas?.height || pages[0]?.getSize()?.height || 1;
+            
+            for (let i = 0; i < pages.length; i++) {
+                const page = pages[i];
+                const { width: pageWidth, height: pageHeight } = page.getSize();
+                const signatures = (DocumentService.documentSignatures || []).filter(s => (s.page || 1) === (i + 1));
+                for (const s of signatures) {
+                    let embeddedImage;
+                    const isPng = (s.data || '').startsWith('data:image/png');
+                    if (isPng) {
+                        embeddedImage = await pdfDoc.embedPng(s.data);
+                    } else {
+                        embeddedImage = await pdfDoc.embedJpg(s.data);
+                    }
+                    const drawWidth = (typeof s.normWidth === 'number')
+                        ? (s.normWidth * pageWidth)
+                        : (((s.width || embeddedImage.width) / pixelWidth) * pageWidth);
+                    const drawHeight = (typeof s.normHeight === 'number')
+                        ? (s.normHeight * pageHeight)
+                        : (((s.height || embeddedImage.height) / pixelHeight) * pageHeight);
+                    const x = (typeof s.normX === 'number')
+                        ? (s.normX * pageWidth)
+                        : (((s.x || 0) / pixelWidth) * pageWidth);
+                    const yTop = (typeof s.normY === 'number')
+                        ? (s.normY * pageHeight)
+                        : (((s.y || 0) / pixelHeight) * pageHeight);
+                    const y = pageHeight - yTop - drawHeight;
+                    page.drawImage(embeddedImage, { x, y, width: drawWidth, height: drawHeight });
+                }
+            }
+            const pdfBytes = await pdfDoc.save({ useObjectStreams: true });
+            const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            return { blob: blob, url: url, type: 'application/pdf', fileName: `documento_firmado_${Date.now()}.pdf` };
+        } catch (error) {
+            console.error('Error en combineWithPDFDirect:', error);
+            throw error;
         }
     }
 
@@ -6870,6 +6922,10 @@ class DocumentExportService {
 
                     ctx.imageSmoothingEnabled = true;
                     ctx.imageSmoothingQuality = 'high';
+
+                    // Rellenar fondo blanco para asegurar que JPEG no salga negro en transparencias
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
                     const renderContext = { canvasContext: ctx, viewport };
                     await page.render(renderContext).promise;
@@ -6921,12 +6977,13 @@ class DocumentExportService {
                             unit: 'px', 
                             format: [canvas.width, canvas.height] 
                         });
-                        const imgData = canvas.toDataURL('image/png', 1.0);
-                        pdfOutput.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height, undefined, 'FAST');
+                        // Usar JPEG con calidad 0.75 para reducir drásticamente el tamaño del archivo final
+                        const imgData = canvas.toDataURL('image/jpeg', 0.75);
+                        pdfOutput.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height, undefined, 'FAST');
                     } else {
                         pdfOutput.addPage([canvas.width, canvas.height], orientation);
-                        const imgData = canvas.toDataURL('image/png', 1.0);
-                        pdfOutput.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height, undefined, 'FAST');
+                        const imgData = canvas.toDataURL('image/jpeg', 0.75);
+                        pdfOutput.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height, undefined, 'FAST');
                     }
                 }
 
