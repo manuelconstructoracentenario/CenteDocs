@@ -6537,6 +6537,7 @@ class DocumentService {
                     <button id="dbgCopyBtn">Copiar</button>
                     <label><input type="checkbox" id="dbgCompToggle"> Compensar X</label>
                     <input id="dbgCompPct" type="number" value="0" min="0" max="20" step="0.1" title="Porcentaje de compensación horizontal (ej: 1 = 1%)">%
+                    <label style="margin-left:6px"><input type="checkbox" id="dbgExportMarkers"> Marcar export</label>
                     <button id="dbgClearBtn">Limpiar</button>
                 </div>
             </div>
@@ -6577,6 +6578,10 @@ class DocumentService {
         } catch (e) {
             console.warn('Error _logDebug', e);
         }
+    }
+
+    static _shouldShowExportMarkers() {
+        try { return !!document.getElementById('dbgExportMarkers') && document.getElementById('dbgExportMarkers').checked; } catch(e) { return false; }
     }
 
     static _copyDebugLogs() {
@@ -7184,7 +7189,40 @@ class DocumentExportService {
                                 ctx.imageSmoothingQuality = 'high';
                                 console.log('combineWithPDF: dibujando firma', { id: s.id, page: p, x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height), useNorm: typeof s.normX === 'number' });
                                 this._logDebug('combineWithPDF.draw', { id: s.id, page: p, x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
-                                ctx.drawImage(img, x, y, width, height);
+                                // Si el usuario pidió ver marcadores de export, dibujar un marcador
+                                try {
+                                    if (this._shouldShowExportMarkers()) {
+                                        const markerLeft = Math.round((x / canvas.width) * viewerPixelWidth);
+                                        const markerTop = Math.round((y / canvas.height) * viewerPixelHeight);
+                                        const markerW = Math.round((width / canvas.width) * viewerPixelWidth);
+                                        const markerH = Math.round((height / canvas.height) * viewerPixelHeight);
+                                        const signatureLayer = document.getElementById('signatureLayer');
+                                        if (signatureLayer) {
+                                            const mk = document.createElement('div');
+                                            mk.className = 'export-debug-marker';
+                                            mk.style.left = markerLeft + 'px';
+                                            mk.style.top = markerTop + 'px';
+                                            mk.style.width = Math.max(2, markerW) + 'px';
+                                            mk.style.height = Math.max(2, markerH) + 'px';
+                                            signatureLayer.appendChild(mk);
+                                            setTimeout(() => { try { mk.remove(); } catch (e) {} }, 4000);
+                                            this._logDebug('export.marker.created', { id: s.id, markerLeft, markerTop, markerW, markerH });
+                                        }
+                                    }
+                                } catch (e) { console.warn('Error mostrando export marker', e); }
+
+                                try {
+                                    ctx.drawImage(img, x, y, width, height);
+                                } catch (drawErr) {
+                                    // Dibujar placeholder visible si falla
+                                    console.error('combineWithPDF: drawImage error', drawErr, { id: s.id, x, y, width, height });
+                                    this._logDebug('combineWithPDF.draw.error', { id: s.id, drawErr: String(drawErr) });
+                                    ctx.fillStyle = 'rgba(255,0,0,0.3)';
+                                    ctx.fillRect(Math.max(0, x), Math.max(0, y), Math.max(2, width), Math.max(2, height));
+                                    ctx.fillStyle = '#fff';
+                                    ctx.font = '12px Arial';
+                                    ctx.fillText('Firma', Math.max(2, x + 4), Math.max(14, y + 14));
+                                }
                             } catch (innerErr) {
                                 console.error('combineWithPDF: error dibujando firma fallback', innerErr, s);
                             }
@@ -7293,9 +7331,34 @@ class DocumentExportService {
                             console.log('combineWithImage: dibujando firma', { id: s.id, page: DocumentService.currentPage, x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height), useNorm: typeof s.normX === 'number' });
                             this._logDebug('combineWithImage.draw', { id: s.id, page: DocumentService.currentPage, x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
                             try {
+                                if (this._shouldShowExportMarkers()) {
+                                    const signatureLayer = document.getElementById('signatureLayer');
+                                    if (signatureLayer) {
+                                        const mk = document.createElement('div');
+                                        const displayCanvas = document.getElementById('documentCanvas');
+                                        const dispRect = displayCanvas.getBoundingClientRect();
+                                        const markerLeft = Math.round((x / canvas.width) * dispRect.width);
+                                        const markerTop = Math.round((y / canvas.height) * dispRect.height);
+                                        const markerW = Math.round((width / canvas.width) * dispRect.width);
+                                        const markerH = Math.round((height / canvas.height) * dispRect.height);
+                                        mk.className = 'export-debug-marker';
+                                        mk.style.left = markerLeft + 'px';
+                                        mk.style.top = markerTop + 'px';
+                                        mk.style.width = Math.max(2, markerW) + 'px';
+                                        mk.style.height = Math.max(2, markerH) + 'px';
+                                        signatureLayer.appendChild(mk);
+                                        setTimeout(() => { try { mk.remove(); } catch (e) {} }, 4000);
+                                    }
+                                }
                                 ctx.drawImage(imgSignature, x, y, width, height);
                             } catch (drawErr) {
                                 console.error('Error dibujando imagen de firma en image canvas:', drawErr, { x, y, width, height, imgSrc: imgSignature.src });
+                                this._logDebug('combineWithImage.draw.error', { id: s.id, drawErr: String(drawErr) });
+                                ctx.fillStyle = 'rgba(255,0,0,0.3)';
+                                ctx.fillRect(Math.max(0, x), Math.max(0, y), Math.max(2, width), Math.max(2, height));
+                                ctx.fillStyle = '#fff';
+                                ctx.font = '12px Arial';
+                                ctx.fillText('Firma', Math.max(2, x + 4), Math.max(14, y + 14));
                             }
                         } catch (inner) {
                             console.warn('combineWithImage: fallo cargando firma', inner, s);
