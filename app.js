@@ -5775,66 +5775,6 @@ class DocumentService {
         }
     }
 
-    // MÓVIL: Obtener coordenadas aún más precisas considerando viewport y zoom
-    static getMobileTouchCoordinates(touch, canvas) {
-        try {
-            const rect = canvas.getBoundingClientRect();
-
-            // Detectar cliente según disponibilidad
-            let clientX, clientY;
-            if (touch.clientX !== undefined && touch.clientY !== undefined) {
-                clientX = touch.clientX;
-                clientY = touch.clientY;
-            } else if (touch.pageX !== undefined && touch.pageY !== undefined) {
-                clientX = touch.pageX - window.scrollX;
-                clientY = touch.pageY - window.scrollY;
-            } else if (touch.touches && touch.touches[0]) {
-                clientX = touch.touches[0].clientX;
-                clientY = touch.touches[0].clientY;
-            } else {
-                clientX = 0;
-                clientY = 0;
-            }
-
-            const zoom = this.currentZoom || 1.0;
-
-            const canvasDisplayWidth = rect.width;
-            const canvasDisplayHeight = rect.height;
-
-            const canvasPixelWidth = canvas.width;
-            const canvasPixelHeight = canvas.height;
-
-            const scaleX = canvasPixelWidth / canvasDisplayWidth;
-            const scaleY = canvasPixelHeight / canvasDisplayHeight;
-
-            const displayX = (clientX - rect.left) * (1 / zoom);
-            const displayY = (clientY - rect.top) * (1 / zoom);
-
-            const pixelX = displayX * scaleX;
-            const pixelY = displayY * scaleY;
-
-            console.log('📱 Coordenadas móvil:', {
-                touch: { clientX, clientY },
-                rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
-                zoom: zoom,
-                display: { x: displayX, y: displayY },
-                pixel: { x: pixelX, y: pixelY },
-                scales: { x: scaleX, y: scaleY }
-            });
-
-            return {
-                displayX: displayX,
-                displayY: displayY,
-                pixelX: pixelX,
-                pixelY: pixelY,
-                rect: rect
-            };
-        } catch (err) {
-            console.warn('getMobileTouchCoordinates error', err);
-            return { displayX: 0, displayY: 0, pixelX: 0, pixelY: 0, rect: { left: 0, top: 0, width: 0, height: 0 } };
-        }
-    }
-
     static showPDFFallback(canvas, ctx) {
         const optimalSize = this.calculateOptimalDocumentSize(800, 1000);
         canvas.width = optimalSize.width;
@@ -6040,7 +5980,7 @@ class DocumentService {
                 signatureLayer.style.height = scaledHeight + 'px';
             }
             
-            this.repositionSignaturesForZoomSmart();
+            this.repositionSignaturesForZoom();
         }
         
         const zoomLevel = document.getElementById('zoomLevel');
@@ -6109,155 +6049,6 @@ class DocumentService {
         });
     }
 
-    static repositionSignaturesForZoomSmart() {
-        const canvas = document.getElementById('documentCanvas');
-        const signatureLayer = document.getElementById('signatureLayer');
-        if (!canvas || !signatureLayer) return;
-
-        // Mobile-aware repositioning
-        const isMobile = window.innerWidth <= 768;
-        const rect = canvas.getBoundingClientRect();
-        let displayWidth = rect.width;
-        let displayHeight = rect.height;
-
-        if (isMobile) {
-            try {
-                const transform = window.getComputedStyle(canvas).transform;
-                if (transform && transform !== 'none') {
-                    const matrix = new DOMMatrixReadOnly(transform);
-                    if (matrix.a && matrix.d) {
-                        displayWidth = rect.width / matrix.a;
-                        displayHeight = rect.height / matrix.d;
-                    }
-                }
-            } catch (err) {
-                // ignore
-            }
-        } else {
-            displayWidth = rect.width || canvas.offsetWidth;
-            displayHeight = rect.height || canvas.offsetHeight;
-        }
-
-        const pixelWidth = canvas.width;
-        const pixelHeight = canvas.height;
-
-        signatureLayer.style.width = displayWidth + 'px';
-        signatureLayer.style.height = displayHeight + 'px';
-
-        try {
-            const parentRect = signatureLayer.parentElement.getBoundingClientRect();
-            signatureLayer.style.left = (rect.left - parentRect.left) + 'px';
-            signatureLayer.style.top = (rect.top - parentRect.top) + 'px';
-        } catch (err) {
-            signatureLayer.style.left = '0px';
-            signatureLayer.style.top = '0px';
-        }
-
-        // Reposicionar
-        this.documentSignatures.forEach(signature => {
-            const signatureElement = document.querySelector(`[data-signature-id="${signature.id}"]`);
-            if (!signatureElement) return;
-
-            const relX = (typeof signature.normX === 'number') ? signature.normX : (signature.x / pixelWidth);
-            const relY = (typeof signature.normY === 'number') ? signature.normY : (signature.y / pixelHeight);
-            const relW = (typeof signature.normWidth === 'number') ? signature.normWidth : (signature.width / pixelWidth);
-            const relH = (typeof signature.normHeight === 'number') ? signature.normHeight : (signature.height / pixelHeight);
-
-            const scaledX = relX * displayWidth;
-            const scaledY = relY * displayHeight;
-            const scaledWidth = relW * displayWidth;
-            const scaledHeight = relH * displayHeight;
-
-            signatureElement.style.left = scaledX + 'px';
-            signatureElement.style.top = scaledY + 'px';
-            signatureElement.style.width = scaledWidth + 'px';
-            signatureElement.style.height = scaledHeight + 'px';
-
-            if (isMobile) {
-                console.log('📱 Reposicionando firma móvil (smart):', { id: signature.id, relX, relY, scaledX, scaledY, displayWidth, displayHeight });
-            }
-        });
-    }
-
-    // Método de debug para móvil - despliega info breve y consola
-    static debugMobilePlacement(touch, canvas) {
-        try {
-            const rect = canvas.getBoundingClientRect();
-            const styles = window.getComputedStyle(canvas);
-
-            console.log('📱 DEBUG - Móvil:', {
-                viewport: {
-                    width: window.innerWidth,
-                    height: window.innerHeight,
-                    scrollX: window.scrollX,
-                    scrollY: window.scrollY
-                },
-                canvasRect: {
-                    left: rect.left,
-                    top: rect.top,
-                    width: rect.width,
-                    height: rect.height,
-                    right: rect.right,
-                    bottom: rect.bottom
-                },
-                canvasStyle: {
-                    transform: styles.transform,
-                    transformOrigin: styles.transformOrigin,
-                    width: styles.width,
-                    height: styles.height
-                },
-                touch: {
-                    clientX: touch.clientX,
-                    clientY: touch.clientY,
-                    pageX: touch.pageX,
-                    pageY: touch.pageY,
-                    screenX: touch.screenX,
-                    screenY: touch.screenY
-                },
-                calculations: {
-                    relativeX: touch.clientX - rect.left,
-                    relativeY: touch.clientY - rect.top,
-                    percentageX: ((touch.clientX - rect.left) / rect.width * 100).toFixed(1) + '%',
-                    percentageY: ((touch.clientY - rect.top) / rect.height * 100).toFixed(1) + '%'
-                }
-            });
-
-            const debugDiv = document.getElementById('mobileDebug') || (function() {
-                const div = document.createElement('div');
-                div.id = 'mobileDebug';
-                div.style.cssText = `
-                    position: fixed;
-                    top: 10px;
-                    left: 10px;
-                    background: rgba(0,0,0,0.8);
-                    color: white;
-                    padding: 10px;
-                    z-index: 99999;
-                    font-size: 12px;
-                    border-radius: 5px;
-                    max-width: 300px;
-                    display: none;
-                `;
-                document.body.appendChild(div);
-                return div;
-            })();
-
-            debugDiv.innerHTML = `
-                <div>Touch: ${Math.round(touch.clientX)}, ${Math.round(touch.clientY)}</div>
-                <div>Canvas: ${Math.round(rect.left)}, ${Math.round(rect.top)}</div>
-                <div>Relative: ${Math.round(touch.clientX - rect.left)}, ${Math.round(touch.clientY - rect.top)}</div>
-                <div>Zoom: ${this.currentZoom}x</div>
-            `;
-            debugDiv.style.display = 'block';
-
-            setTimeout(() => {
-                debugDiv.style.display = 'none';
-            }, 2000);
-        } catch (err) {
-            console.warn('debugMobilePlacement error', err);
-        }
-    }
-
     static renderExistingSignatures() {
         const signatureLayer = document.getElementById('signatureLayer');
         if (!signatureLayer) return;
@@ -6288,7 +6079,7 @@ class DocumentService {
             signatureLayer.appendChild(signatureElement);
         });
 
-        this.repositionSignaturesForZoomSmart();
+        this.repositionSignaturesForZoom();
     }
 
     // ==========================
@@ -6512,7 +6303,7 @@ class DocumentService {
             
             // Remover listeners del documento (EN EL DOCUMENT, no en canvas)
             document.removeEventListener('click', clickHandler, true);
-            document.removeEventListener('touchstart', touchHandler, true);
+            document.removeEventListener('touchend', touchHandler, true);
             console.log('%c✓ Listeners removidos del document', 'color: #4caf50');
             
             // Agregar firma CON DELAY
@@ -6522,65 +6313,69 @@ class DocumentService {
             }, 50);
         };
         
-        // Handler para toque (móvil) - usa touchstart y getMobileTouchCoordinates
+        // Handler para toque (móvil)
         const touchHandler = (e) => {
-            console.log('📱 Touch event en móvil:', e.type);
-
-            if (!e.touches || e.touches.length === 0) {
-                return;
-            }
-
-            const touch = e.touches[0];
-            const target = document.elementFromPoint(touch.clientX, touch.clientY);
-
-            const touchedOnDocument = target === canvas || 
-                                     target?.id === 'documentCanvas' ||
-                                     target?.closest('#documentContainer') ||
-                                     viewerContent?.contains(target);
-
-            console.log('📱 Touch target:', target?.id || target?.className, 'en documento:', touchedOnDocument);
-
+            console.log('%c👆 TOUCH DETECTADO en:', 'color: #ff9800; font-weight: bold', e.target?.id || e.target?.className || 'elemento');
+            
+            // Verificar que el touch fue en el canvas o en la zona del documento
+            const touchedOnDocument = e.target === canvas || 
+                                     e.target?.id === 'documentCanvas' ||
+                                     viewerContent?.contains(e.target);
+            
             if (!touchedOnDocument) {
-                console.log('⚠️ Touch fuera del documento');
+                console.log('%c⚠️ Touch fuera del documento, ignorando', 'color: #ff9800');
                 return;
             }
-
+            
             if (!this.isSignatureMode) {
-                console.log('⚠️ Modo firma no activo');
+                console.warn('%c❌ isSignatureMode es false (touch)', 'color: #f44336');
                 return;
             }
-
+            
             if (!this.currentSignature) {
-                console.log('⚠️ No hay firma seleccionada');
+                console.warn('%c❌ No hay currentSignature (touch)', 'color: #f44336');
                 return;
             }
+            
+            if (!e.changedTouches || e.changedTouches.length === 0) {
+                console.warn('%c❌ Sin touch points', 'color: #f44336');
+                return;
+            }
+            
+            console.log('%c✅ Condiciones válidas (touch), procesando', 'color: #4caf50; font-weight: bold');
+            
+            const touch = e.changedTouches[0];
+            // Usar helper para coordenadas precisas en móvil (pageX/pageY + scroll)
+            const coords = this.getPreciseTouchCoordinates(touch, canvas);
+            const displayX = coords.displayX;
+            const displayY = coords.displayY;
+            const x = coords.x;
+            const y = coords.y;
 
-            // Obtener coordenadas PRECISAS para móvil
-            const coords = this.getMobileTouchCoordinates(touch, canvas);
-
-            console.log(`📍 Coordenadas móvil finales: pixel(${Math.round(coords.pixelX)}, ${Math.round(coords.pixelY)})`);
-
-            // Prevenir comportamientos por defecto
-            e.preventDefault();
+            console.log(`%c📍 Display coords (móvil): (${Math.round(displayX)}, ${Math.round(displayY)})`, 'color: #ff9800');
+            console.log(`%c📍 Pixel coords (móvil): (${Math.round(x)}, ${Math.round(y)})`, 'color: #ff9800; font-weight: bold');
+            
+            // Prevenir scroll
             e.stopPropagation();
-
-            // Desactivar modo firma inmediatamente
+            e.preventDefault();
+            
+            // DESACTIVAR INMEDIATAMENTE
             this.isSignatureMode = false;
             document.body.classList.remove('signature-mode-active');
             canvas.style.cursor = 'default';
             viewerContent.style.cursor = 'auto';
-
+            
             // Remover listeners
             document.removeEventListener('click', clickHandler, true);
-            document.removeEventListener('touchstart', touchHandler, { passive: false, capture: true });
+            document.removeEventListener('touchend', touchHandler, { passive: false, capture: true });
             console.log('%c✓ Listeners removidos del document', 'color: #ff9800');
-
-            // Agregar firma con las coordenadas calculadas
+            
+            // Agregar firma CON DELAY
             setTimeout(() => {
-                console.log('📍 Agregando firma en móvil con coordenadas:', coords.pixelX, coords.pixelY);
-                this.addSignatureToDocument(coords.pixelX, coords.pixelY);
-            }, 100);
-        }; 
+                console.log(`%c📍 Llamando addSignatureToDocument con (${Math.round(x)}, ${Math.round(y)})`, 'color: #9c27b0; font-weight: bold');
+                this.addSignatureToDocument(x, y);
+            }, 50);
+        };
         
         // Guardar referencias
         this._oldClickHandler = clickHandler;
@@ -6589,7 +6384,7 @@ class DocumentService {
         // Agregar listeners AL DOCUMENTO (capture phase = true para interceptar antes)
         console.log('%c🔗 Agregando listeners al DOCUMENT (capture phase)', 'color: #673ab7; font-weight: bold');
         document.addEventListener('click', clickHandler, true);
-        document.addEventListener('touchstart', touchHandler, { passive: false, capture: true });
+        document.addEventListener('touchend', touchHandler, { passive: false, capture: true });
         console.log('%c✓ Listeners agregados - Esperando clic/toque del usuario...', 'color: #4caf50; font-weight: bold; font-size: 14px');
     }
 
@@ -6656,32 +6451,13 @@ class DocumentService {
             // Si el usuario especificó una posición (clic/toque), usarla
             if (manualX !== null && manualY !== null) {
                 console.log(`📍 Usando posición del usuario: (${Math.round(manualX)}, ${Math.round(manualY)})`);
-                const canvas = document.getElementById('documentCanvas');
-                if (canvas) {
-                    const zoom = this.currentZoom || 1.0;
-                    const adjustedX = manualX / zoom;
-                    const adjustedY = manualY / zoom;
-
-                    const maxX = canvas.width - 150;
-                    const maxY = canvas.height - 60;
-
-                    position = {
-                        x: Math.max(10, Math.min(adjustedX, maxX)),
-                        y: Math.max(10, Math.min(adjustedY, maxY)),
-                        fieldType: ('ontouchstart' in window) ? 'mobile_touch' : 'user_click',
-                        confidence: 1.0
-                    };
-
-                    console.log('📱 Posición ajustada para dispositivo móvil/escalado:', position);
-                } else {
-                    position = {
-                        x: manualX,
-                        y: manualY,
-                        fieldType: 'user_click',
-                        confidence: 1.0
-                    };
-                }
-            } else { 
+                position = {
+                    x: manualX,
+                    y: manualY,
+                    fieldType: 'user_click',
+                    confidence: 1.0
+                };
+            } else {
                 // Fallback: buscar automáticamente si no hay posición manual
                 console.log('🔍 Buscando ubicación automática...');
                 const autoPosition = await this.findSignaturePosition();
