@@ -4634,34 +4634,6 @@
     -webkit-tap-highlight-color: transparent !important;
 }
 
-/* Mejores interacciones táctiles para canvas y capas de firma */
-#documentCanvas, #signatureLayer {
-    touch-action: manipulation;
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    user-select: none;
-}
-
-.document-signature {
-    touch-action: none;
-    -webkit-transform: translateZ(0);
-    transform: translateZ(0);
-}
-
-/* Allow scrolling in the document viewer while in signature mode; avoid locking the entire page */
-body.signature-mode-active {
-    position: static;
-    overflow: visible;
-}
-
-/* Ensure viewer content remains scrollable and touch-friendly when signing */
-body.signature-mode-active .viewer-content,
-body.signature-mode-active #documentContainer {
-    -webkit-overflow-scrolling: touch;
-    overflow: auto;
-    touch-action: manipulation;
-}
-
 /* Firmas seleccionadas */
 .document-signature.selected {
     border: 2px solid #599d5e !important;

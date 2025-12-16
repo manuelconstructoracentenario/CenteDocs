@@ -5027,23 +5027,21 @@ class DocumentService {
     // ===========================================
     static startDragTouch(e, element, signatureData) {
         const touch = e.touches[0];
-        const canvas = document.getElementById('documentCanvas');
-        const startCoords = canvas ? this.getPreciseTouchCoordinates(touch, canvas) : { displayX: touch.clientX, displayY: touch.clientY };
-        const startX = startCoords.displayX;
-        const startY = startCoords.displayY;
+        const startX = touch.clientX;
+        const startY = touch.clientY;
         const startLeft = parseFloat(element.style.left) || 0;
         const startTop = parseFloat(element.style.top) || 0;
         
         const dragMove = (moveEvent) => {
             const currentTouch = moveEvent.touches[0];
-            const curCoords = canvas ? this.getPreciseTouchCoordinates(currentTouch, canvas) : { displayX: currentTouch.clientX, displayY: currentTouch.clientY };
-            const dx = curCoords.displayX - startX;
-            const dy = curCoords.displayY - startY;
+            const dx = currentTouch.clientX - startX;
+            const dy = currentTouch.clientY - startY;
             
             let newLeft = startLeft + dx;
             let newTop = startTop + dy;
             
             // Limitar al canvas
+            const canvas = document.getElementById('documentCanvas');
             if (canvas) {
                 const rect = canvas.getBoundingClientRect();
                 const elementRect = element.getBoundingClientRect();
@@ -5113,12 +5111,11 @@ class DocumentService {
     // ===========================================
     static startResizeTouch(e, element, signatureData) {
         const touch = e.touches[0];
-        const canvas = document.getElementById('documentCanvas');
-        const handle = document.elementFromPoint((touch.pageX || touch.clientX), (touch.pageY || touch.clientY));
+        const handle = document.elementFromPoint(touch.clientX, touch.clientY);
         const handleClass = handle?.className || '';
-        const startCoords = canvas ? this.getPreciseTouchCoordinates(touch, canvas) : { displayX: touch.clientX, displayY: touch.clientY };
-        const startX = startCoords.displayX;
-        const startY = startCoords.displayY;
+        
+        const startX = touch.clientX;
+        const startY = touch.clientY;
         const startWidth = parseFloat(element.style.width) || element.offsetWidth;
         const startHeight = parseFloat(element.style.height) || element.offsetHeight;
         const startLeft = parseFloat(element.style.left) || 0;
@@ -5129,9 +5126,8 @@ class DocumentService {
         
         const resizeMove = (moveEvent) => {
             const currentTouch = moveEvent.touches[0];
-            const curCoords = canvas ? this.getPreciseTouchCoordinates(currentTouch, canvas) : { displayX: currentTouch.clientX, displayY: currentTouch.clientY };
-            const dx = curCoords.displayX - startX;
-            const dy = curCoords.displayY - startY;
+            const dx = currentTouch.clientX - startX;
+            const dy = currentTouch.clientY - startY;
             
             let newWidth = startWidth;
             let newHeight = startHeight;
@@ -5742,40 +5738,6 @@ class DocumentService {
         }
     }
 
-    // ==============================
-    // MÓVIL: Obtener coordenadas precisas
-    // ==============================
-    static getPreciseTouchCoordinates(touch, canvas) {
-        try {
-            const rect = canvas.getBoundingClientRect();
-
-            // pageX/pageY y considerar scroll son más fiables en móviles
-            const pageX = (touch.pageX !== undefined) ? touch.pageX - window.scrollX : (touch.clientX - window.scrollX);
-            const pageY = (touch.pageY !== undefined) ? touch.pageY - window.scrollY : (touch.clientY - window.scrollY);
-
-            const displayX = pageX - rect.left;
-            const displayY = pageY - rect.top;
-
-            // Mapping de display (CSS) -> canvas pixel
-            const scaleX = rect.width > 0 ? (canvas.width / rect.width) : 1;
-            const scaleY = rect.height > 0 ? (canvas.height / rect.height) : 1;
-
-            const x = displayX * scaleX;
-            const y = displayY * scaleY;
-
-            return {
-                x: Math.max(0, x),
-                y: Math.max(0, y),
-                displayX: displayX,
-                displayY: displayY,
-                scaleX, scaleY
-            };
-        } catch (err) {
-            console.warn('getPreciseTouchCoordinates error', err);
-            return { x: 0, y: 0, displayX: 0, displayY: 0, scaleX: 1, scaleY: 1 };
-        }
-    }
-
     static showPDFFallback(canvas, ctx) {
         const optimalSize = this.calculateOptimalDocumentSize(800, 1000);
         canvas.width = optimalSize.width;
@@ -5993,21 +5955,10 @@ class DocumentService {
         const signatureLayer = document.getElementById('signatureLayer');
         if (!canvas || !signatureLayer) return;
         
-        // Obtener dimensiones de visualización (considerar transform CSS cuando exista)
+        // Usar getBoundingClientRect para obtener dimensiones reales de visualización
         const displayRect = canvas.getBoundingClientRect();
-        const computedStyle = window.getComputedStyle(canvas);
-        const transform = computedStyle?.transform || 'none';
-
-        let displayWidth, displayHeight;
-        if (transform && transform !== 'none') {
-            // Cuando hay transform CSS (scale), el bounding rect ya refleja la escala
-            displayWidth = displayRect.width;
-            displayHeight = displayRect.height;
-        } else {
-            // Sin transform, preferir offsetWidth/offsetHeight (layout size)
-            displayWidth = canvas.offsetWidth || displayRect.width;
-            displayHeight = canvas.offsetHeight || displayRect.height;
-        }
+        const displayWidth = displayRect.width;
+        const displayHeight = displayRect.height;
 
         // El canvas.width/height son las dimensiones en píxeles de la superficie de dibujo
         const pixelWidth = canvas.width;
@@ -6036,6 +5987,16 @@ class DocumentService {
                 signatureElement.style.top = scaledY + 'px';
                 signatureElement.style.width = scaledWidth + 'px';
                 signatureElement.style.height = scaledHeight + 'px';
+                console.log('repositionSignaturesForZoom:', signature.id, 'scaled left/top/wh(px)=', Math.round(scaledX), Math.round(scaledY), Math.round(scaledWidth), Math.round(scaledHeight));
+                // Actualizar rect de overlay para debug (posiciones absolutas)
+                setTimeout(() => {
+                    try {
+                        const rect = signatureElement.getBoundingClientRect();
+                        signature.debug = signature.debug || {};
+                        signature.debug.overlayRect = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+                        this._logDebug('reposition.overlayRect', { id: signature.id, overlayRect: signature.debug.overlayRect });
+                    } catch (e) { /* noop */ }
+                }, 30);
             }
         });
     }
@@ -6064,6 +6025,138 @@ class DocumentService {
         });
 
         this.repositionSignaturesForZoom();
+    }
+
+    // Mostrar marcadores temporales para ayudar a depurar diferencias entre
+    // la posición esperada (norm -> display) y la posición real del overlay
+    static _showPlacementMarkers(displayX, displayY, signatureId) {
+        try {
+            const signatureLayer = document.getElementById('signatureLayer');
+            if (!signatureLayer) return;
+
+            // Remover marcadores previos del mismo id
+            const prev = signatureLayer.querySelectorAll(`.placement-marker[data-sig="${signatureId}"]`);
+            prev.forEach(p => p.remove());
+
+            // Marker esperado (verde)
+            const expected = document.createElement('div');
+            expected.className = 'placement-marker expected';
+            expected.style.left = (displayX - 6) + 'px';
+            expected.style.top = (displayY - 6) + 'px';
+            expected.dataset.sig = signatureId;
+
+            // Marker real (rojo) basado en el overlay actual, si existe
+            const actual = document.createElement('div');
+            actual.className = 'placement-marker actual';
+            actual.dataset.sig = signatureId;
+
+            const signatureElement = document.querySelector(`[data-signature-id="${signatureId}"]`);
+            if (signatureElement) {
+                const rect = signatureElement.getBoundingClientRect();
+                const layerRect = signatureLayer.getBoundingClientRect();
+                // Convertir coordenadas absolutas a relativas a la capa
+                const centerX = rect.left - layerRect.left + rect.width / 2;
+                const centerY = rect.top - layerRect.top + rect.height / 2;
+                actual.style.left = (centerX - 6) + 'px';
+                actual.style.top = (centerY - 6) + 'px';
+            } else {
+                // Si no hay overlay, colocar el marker actual encima del esperado
+                actual.style.left = (displayX - 6) + 'px';
+                actual.style.top = (displayY - 6) + 'px';
+            }
+
+            // Etiqueta con coordenadas
+            const label = document.createElement('div');
+            label.className = 'placement-marker-label';
+            const ex = Math.round(displayX);
+            const ey = Math.round(displayY);
+            let ax = ex, ay = ey;
+            if (signatureElement) {
+                const r = signatureElement.getBoundingClientRect();
+                const lr = signatureLayer.getBoundingClientRect();
+                ax = Math.round(r.left - lr.left + r.width / 2);
+                ay = Math.round(r.top - lr.top + r.height / 2);
+            }
+            label.textContent = `exp: ${ex},${ey} — ovl: ${ax},${ay}`;
+            label.dataset.sig = signatureId;
+            label.style.left = (displayX) + 'px';
+            label.style.top = (displayY - 12) + 'px';
+
+            signatureLayer.appendChild(expected);
+            signatureLayer.appendChild(actual);
+            signatureLayer.appendChild(label);
+
+            // Auto remover después de 3s
+            setTimeout(() => {
+                try {
+                    [expected, actual, label].forEach(el => el && el.remove());
+                } catch (e) { /* noop */ }
+            }, 3000);
+        } catch (err) {
+            console.warn('Error _showPlacementMarkers:', err);
+        }
+    }
+
+    // Mostrar preview de export: dibujar rectángulos en la capa indicando
+    // dónde combineWithPDF dibujará cada firma. Útil para comparar antes
+    // de descargar el PDF final.
+    static _showExportPreview(signatures, displayRect) {
+        try {
+            const signatureLayer = document.getElementById('signatureLayer');
+            const canvas = document.getElementById('documentCanvas');
+            if (!signatureLayer || !canvas) return;
+
+            // Limpiar previos
+            const existing = signatureLayer.querySelectorAll('.export-preview-box');
+            existing.forEach(e => e.remove());
+
+            const viewerPixelWidth = displayRect.width;
+            const viewerPixelHeight = displayRect.height;
+
+            signatures.forEach(s => {
+                try {
+                    // Si existe rect guardado (posición visual), úsalo para la preview
+                    let left, top, w, h;
+                    if (s.debug && s.debug.overlayRect) {
+                        const r = s.debug.overlayRect;
+                        left = r.left - displayRect.left;
+                        top = r.top - displayRect.top;
+                        w = r.width;
+                        h = r.height;
+                    } else {
+                        const relX = (typeof s.normX === 'number') ? s.normX : (s.x / canvas.width);
+                        const relY = (typeof s.normY === 'number') ? s.normY : (s.y / canvas.height);
+                        const relW = (typeof s.normWidth === 'number') ? s.normWidth : (s.width / canvas.width);
+                        const relH = (typeof s.normHeight === 'number') ? s.normHeight : (s.height / canvas.height);
+                        left = relX * viewerPixelWidth;
+                        top = relY * viewerPixelHeight;
+                        w = relW * viewerPixelWidth;
+                        h = relH * viewerPixelHeight;
+                    }
+
+                    const box = document.createElement('div');
+                    box.className = 'export-preview-box';
+                    box.style.left = Math.round(left) + 'px';
+                    box.style.top = Math.round(top) + 'px';
+                    box.style.width = Math.max(2, Math.round(w)) + 'px';
+                    box.style.height = Math.max(2, Math.round(h)) + 'px';
+                    box.dataset.sig = s.id;
+                    signatureLayer.appendChild(box);
+                } catch (e) {
+                    console.warn('Error al construir export preview para', s.id, e);
+                }
+            });
+
+            // Auto remover después de 4s
+            setTimeout(() => {
+                try {
+                    const all = signatureLayer.querySelectorAll('.export-preview-box');
+                    all.forEach(a => a.remove());
+                } catch (e) { /* noop */ }
+            }, 4000);
+        } catch (err) {
+            console.warn('Error _showExportPreview:', err);
+        }
     }
 
     // ==========================
@@ -6166,6 +6259,16 @@ class DocumentService {
             signatureElement.style.top = top + 'px';
             signatureElement.style.width = w + 'px';
             signatureElement.style.height = h + 'px';
+            console.log('renderOverlay: sig', signature.id, 'left/top/wh(px)=', Math.round(left), Math.round(top), Math.round(w), Math.round(h), 'usingNorm=', typeof signature.normX === 'number');
+            // Capturar rect del overlay para debug (puede cambiar tras repaint)
+            setTimeout(() => {
+                try {
+                    const rect = signatureElement.getBoundingClientRect();
+                    signature.debug = signature.debug || {};
+                    signature.debug.overlayRect = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+                    this._logDebug('signature.overlayRect', { id: signature.id, overlayRect: signature.debug.overlayRect });
+                } catch (e) { /* noop */ }
+            }, 40);
         } else {
             signatureElement.style.left = signature.x + 'px';
             signatureElement.style.top = signature.y + 'px';
@@ -6175,7 +6278,7 @@ class DocumentService {
         signatureElement.dataset.signatureId = signature.id;
         
         signatureElement.innerHTML = `
-            <img src="${signature.data}" alt="Firma de ${signature.userName}" onerror="this.style.display='none'" style="image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; background: transparent !important;">
+            <img src="${signature.data}" alt="Firma de ${signature.userName}" onerror="this.style.display='none'" style="image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; background: transparent !important; display:block;">
             <div class="signature-handle handle-top-left"></div>
             <div class="signature-handle handle-top-right"></div>
             <div class="signature-handle handle-bottom-left"></div>
@@ -6271,9 +6374,12 @@ class DocumentService {
             const displayY = e.clientY - rect.top;
             const x = displayX * scaleX;
             const y = displayY * scaleY;
+            const normX = rect.width > 0 ? (displayX / rect.width) : 0;
+            const normY = rect.height > 0 ? (displayY / rect.height) : 0;
             
             console.log(`%c📍 Display coords: (${Math.round(displayX)}, ${Math.round(displayY)})`, 'color: #4caf50');
             console.log(`%c📍 Pixel coords: (${Math.round(x)}, ${Math.round(y)})`, 'color: #4caf50; font-weight: bold');
+            this._logDebug('input.click', { displayX: Math.round(displayX), displayY: Math.round(displayY), x: Math.round(x), y: Math.round(y), normX: normX.toFixed(4), normY: normY.toFixed(4) });
             
             // Prevenir que se propague
             e.stopPropagation();
@@ -6292,8 +6398,8 @@ class DocumentService {
             
             // Agregar firma CON DELAY
             setTimeout(() => {
-                console.log(`%c📍 Llamando addSignatureToDocument con (${Math.round(x)}, ${Math.round(y)})`, 'color: #9c27b0; font-weight: bold');
-                this.addSignatureToDocument(x, y);
+                console.log(`%c📍 Llamando addSignatureToDocument con (${Math.round(x)}, ${Math.round(y)}) norm=(${normX.toFixed(4)},${normY.toFixed(4)})`, 'color: #9c27b0; font-weight: bold');
+                this.addSignatureToDocument(x, y, normX, normY);
             }, 50);
         };
         
@@ -6329,15 +6435,21 @@ class DocumentService {
             console.log('%c✅ Condiciones válidas (touch), procesando', 'color: #4caf50; font-weight: bold');
             
             const touch = e.changedTouches[0];
-            // Usar helper para coordenadas precisas en móvil (pageX/pageY + scroll)
-            const coords = this.getPreciseTouchCoordinates(touch, canvas);
-            const displayX = coords.displayX;
-            const displayY = coords.displayY;
-            const x = coords.x;
-            const y = coords.y;
-
-            console.log(`%c📍 Display coords (móvil): (${Math.round(displayX)}, ${Math.round(displayY)})`, 'color: #ff9800');
-            console.log(`%c📍 Pixel coords (móvil): (${Math.round(x)}, ${Math.round(y)})`, 'color: #ff9800; font-weight: bold');
+            const rect = canvas.getBoundingClientRect();
+            
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            const displayX = touch.clientX - rect.left;
+            const displayY = touch.clientY - rect.top;
+            const x = displayX * scaleX;
+            const y = displayY * scaleY;
+            const normX = rect.width > 0 ? (displayX / rect.width) : 0;
+            const normY = rect.height > 0 ? (displayY / rect.height) : 0;
+            
+            console.log(`%c📍 Display coords: (${Math.round(displayX)}, ${Math.round(displayY)})`, 'color: #ff9800');
+            console.log(`%c📍 Pixel coords: (${Math.round(x)}, ${Math.round(y)})`, 'color: #ff9800; font-weight: bold');
+            this._logDebug('input.touch', { displayX: Math.round(displayX), displayY: Math.round(displayY), x: Math.round(x), y: Math.round(y), normX: normX.toFixed(4), normY: normY.toFixed(4) });
             
             // Prevenir scroll
             e.stopPropagation();
@@ -6351,13 +6463,13 @@ class DocumentService {
             
             // Remover listeners
             document.removeEventListener('click', clickHandler, true);
-            document.removeEventListener('touchend', touchHandler, { passive: false, capture: true });
+            document.removeEventListener('touchend', touchHandler, true);
             console.log('%c✓ Listeners removidos del document', 'color: #ff9800');
             
             // Agregar firma CON DELAY
             setTimeout(() => {
-                console.log(`%c📍 Llamando addSignatureToDocument con (${Math.round(x)}, ${Math.round(y)})`, 'color: #9c27b0; font-weight: bold');
-                this.addSignatureToDocument(x, y);
+                console.log(`%c📍 Llamando addSignatureToDocument con (${Math.round(x)}, ${Math.round(y)}) norm=(${normX.toFixed(4)},${normY.toFixed(4)})`, 'color: #9c27b0; font-weight: bold');
+                this.addSignatureToDocument(x, y, normX, normY);
             }, 50);
         };
         
@@ -6411,11 +6523,103 @@ class DocumentService {
         this.canvasClickHandler = null;
     }
 
+    // ==========================
+    // Consola de depuración in-app
+    // ==========================
+    static _initDebugConsole() {
+        if (document.getElementById('debugConsole')) return;
+        const panel = document.createElement('div');
+        panel.id = 'debugConsole';
+        panel.innerHTML = `
+            <div class="debug-header">
+                <span>Logs</span>
+                <div class="debug-actions">
+                    <button id="dbgCopyBtn">Copiar</button>
+                    <label><input type="checkbox" id="dbgCompToggle"> Compensar X</label>
+                    <input id="dbgCompPct" type="number" value="0" min="0" max="20" step="0.1" title="Porcentaje de compensación horizontal (ej: 1 = 1%)">%
+                    <label style="margin-left:6px"><input type="checkbox" id="dbgExportMarkers"> Marcar export</label>
+                    <button id="dbgClearBtn">Limpiar</button>
+                </div>
+            </div>
+            <div id="debugLogArea"></div>
+        `;
+        document.body.appendChild(panel);
+
+        document.getElementById('dbgCopyBtn').addEventListener('click', () => this._copyDebugLogs());
+        document.getElementById('dbgClearBtn').addEventListener('click', () => this._clearDebugLogs());
+    }
+
+    static _logDebug(msg, obj = null) {
+        try {
+            if (!this._debugLogs) this._debugLogs = [];
+            const entry = { t: Date.now(), msg: String(msg), obj };
+            this._debugLogs.push(entry);
+
+            // Keep last 200
+            if (this._debugLogs.length > 200) this._debugLogs.shift();
+
+            // Ensure console is present
+            this._initDebugConsole();
+            const area = document.getElementById('debugLogArea');
+            if (!area) return;
+            const el = document.createElement('div');
+            el.className = 'debug-line';
+            const time = new Date(entry.t).toLocaleTimeString();
+            el.textContent = `${time} — ${entry.msg}`;
+            if (entry.obj) {
+                const pre = document.createElement('pre');
+                pre.className = 'debug-obj';
+                try { pre.textContent = JSON.stringify(entry.obj, null, 2); } catch(e){ pre.textContent = String(entry.obj); }
+                el.appendChild(pre);
+            }
+            area.appendChild(el);
+            // Keep scroll to bottom
+            area.scrollTop = area.scrollHeight;
+        } catch (e) {
+            console.warn('Error _logDebug', e);
+        }
+    }
+
+    static _shouldShowExportMarkers() {
+        try { return !!document.getElementById('dbgExportMarkers') && document.getElementById('dbgExportMarkers').checked; } catch(e) { return false; }
+    }
+
+    static _copyDebugLogs() {
+        try {
+            if (!this._debugLogs) return;
+            const text = this._debugLogs.map(e => `${new Date(e.t).toLocaleString()} - ${e.msg}${e.obj ? '\n'+JSON.stringify(e.obj,null,2) : ''}`).join('\n\n');
+            navigator.clipboard.writeText(text).then(() => {
+                showNotification('Logs copiados al portapapeles', 'success');
+            }).catch(() => {
+                showNotification('No se pudo copiar automáticamente. Selecciona y copia manualmente.', 'warning');
+            });
+        } catch (e) { console.warn('Error copiar logs', e); }
+    }
+
+    static _clearDebugLogs() {
+        try {
+            this._debugLogs = [];
+            const area = document.getElementById('debugLogArea');
+            if (area) area.innerHTML = '';
+            showNotification('Logs limpiados', 'info');
+        } catch (e) { console.warn('Error limpiar logs', e); }
+    }
+
+    static _getCompensationPercent() {
+        try {
+            const toggle = document.getElementById('dbgCompToggle');
+            if (!toggle || !toggle.checked) return 0;
+            const val = parseFloat(document.getElementById('dbgCompPct').value || '0');
+            return isNaN(val) ? 0 : val / 100; // convert percent to fraction
+        } catch (e) { return 0; }
+    }
+
     // ===========================================
     // MODIFICAR addSignatureToDocument para modo automático inteligente
     // ===========================================
-    static async addSignatureToDocument(manualX = null, manualY = null) {
-        console.log('🟢 addSignatureToDocument llamado con:', { manualX, manualY });
+    static async addSignatureToDocument(manualX = null, manualY = null, manualNormX = null, manualNormY = null) {
+        console.log('🟢 addSignatureToDocument llamado con:', { manualX, manualY, manualNormX, manualNormY });
+        this._logDebug('addSignatureToDocument.called', { manualX, manualY, manualNormX, manualNormY });
         
         if (!this.currentSignature) {
             console.warn('⚠️ No hay firma seleccionada');
@@ -6432,8 +6636,20 @@ class DocumentService {
         try {
             let position;
             
-            // Si el usuario especificó una posición (clic/toque), usarla
-            if (manualX !== null && manualY !== null) {
+            // Si el usuario especificó una posición (clic/toque), usarla.
+            // Preferir coordenadas normalizadas si fueron pasadas (más robusto con zoom móvil/browser)
+            if (typeof manualNormX === 'number' && typeof manualNormY === 'number') {
+                const canvas = document.getElementById('documentCanvas');
+                const xPx = canvas ? (manualNormX * canvas.width) : (manualX || 0);
+                const yPx = canvas ? (manualNormY * canvas.height) : (manualY || 0);
+                console.log(`📍 Usando posición normalizada del usuario: norm=(${manualNormX.toFixed(4)}, ${manualNormY.toFixed(4)}) -> px=(${Math.round(xPx)}, ${Math.round(yPx)})`);
+                position = {
+                    x: xPx,
+                    y: yPx,
+                    fieldType: 'user_click',
+                    confidence: 1.0
+                };
+            } else if (manualX !== null && manualY !== null) {
                 console.log(`📍 Usando posición del usuario: (${Math.round(manualX)}, ${Math.round(manualY)})`);
                 position = {
                     x: manualX,
@@ -6519,27 +6735,25 @@ class DocumentService {
                 confidence: position.confidence,
                 fieldType: position.fieldType
             };
-            
-            // Log de diagnóstico: coordenadas y normalizadas (útil para móvil con zoom)
-            try {
-                const rect = document.getElementById('documentCanvas')?.getBoundingClientRect();
-                console.log('📝 Firma creada:', {
-                    id: signature.id,
-                    page: signature.page,
-                    x: Math.round(signature.x),
-                    y: Math.round(signature.y),
-                    width: Math.round(signature.width),
-                    height: Math.round(signature.height),
+
+            // Guardar información de depuración por firma
+            signature.debug = {
+                placedDisplay: {
+                    displayX: (manualNormX || signature.normX) ? null : null
+                },
+                initial: {
+                    x: position.x,
+                    y: position.y,
+                    width: width,
+                    height: height,
                     normX: signature.normX,
                     normY: signature.normY,
                     normWidth: signature.normWidth,
-                    normHeight: signature.normHeight,
-                    canvasRect: rect ? { left: Math.round(rect.left), top: Math.round(rect.top), width: Math.round(rect.width), height: Math.round(rect.height) } : null
-                });
-            } catch (logErr) {
-                console.warn('Error log firma:', logErr);
-            }
-
+                    normHeight: signature.normHeight
+                }
+            };
+            this._logDebug('signature.created', { id: signature.id, placedBy: signature.placedBy, normX: signature.normX, normY: signature.normY });
+            
             // Agregar firma a la lista
             this.documentSignatures.push(signature);
             if (this.currentDocument) {
@@ -6548,6 +6762,22 @@ class DocumentService {
             
             // Actualizar interfaz
             this.renderExistingSignatures();
+            // Mostrar marcadores temporales para depuración visual (posición esperada vs overlay)
+            try {
+                const canvas = document.getElementById('documentCanvas');
+                const signatureLayer = document.getElementById('signatureLayer');
+                if (canvas && signatureLayer) {
+                    const rect = canvas.getBoundingClientRect();
+                    const displayWidth = rect.width;
+                    const displayHeight = rect.height;
+                    const displayX = (signature.normX || (signature.x / canvas.width)) * displayWidth;
+                    const displayY = (signature.normY || (signature.y / canvas.height)) * displayHeight;
+                    this._showPlacementMarkers(displayX, displayY, signature.id);
+                    console.log('placementMarkers: expected display coords =', Math.round(displayX), Math.round(displayY));
+                }
+            } catch (markerErr) {
+                console.warn('Error mostrando marcadores de posicion:', markerErr);
+            }
             this.renderSignaturesList();
             
             // Mostrar notificación
@@ -6788,6 +7018,9 @@ window.addEventListener('resize', () => {
     }, 250);
 });
 
+// Inicializar consola de depuración in-app para capturar logs en móvil
+try { DocumentService._initDebugConsole(); DocumentService._logDebug('debug.console.ready'); } catch(e) { console.warn('No se pudo iniciar la consola debug in-app', e); }
+
 // Sistema de Exportación de Documentos con Firmas
 class DocumentExportService {
     static async combineSignaturesWithDocument() {
@@ -6860,22 +7093,136 @@ class DocumentExportService {
                         const signatures = (DocumentService.documentSignatures || []).filter(s => (s.page || 1) === p);
                         console.log(`combineWithPDF: renderizando página ${p}, firmas = ${signatures.length}`, { scaleFactorX, scaleFactorY });
 
+                        // Mostrar vista previa en la UI de dónde se dibujarán las firmas en el PDF
+                        try {
+                            this._showExportPreview(signatures, displayRect);
+                        } catch (previewErr) {
+                            console.warn('Error mostrando export preview:', previewErr);
+                        }
+
                         for (const s of signatures) {
                             try {
                                 const img = new Image();
                                 img.src = s.data;
                                 await this.waitForImageLoad(img);
 
-                                // Usar coordenadas normalizadas si existen (más robusto cuando hay zoom/transform)
-                                const x = (typeof s.normX === 'number' ? s.normX * canvas.width : (s.x || 0) * scaleFactorX);
-                                const y = (typeof s.normY === 'number' ? s.normY * canvas.height : (s.y || 0) * scaleFactorY);
-                                const width = (typeof s.normWidth === 'number' ? s.normWidth * canvas.width : (s.width || img.naturalWidth) * scaleFactorX);
-                                const height = (typeof s.normHeight === 'number' ? s.normHeight * canvas.height : (s.height || img.naturalHeight) * scaleFactorY);
+                                // Preferir usar la posición del overlay visible (si existe) porque
+                                // en móviles la posición visual puede desplazarse por UI del navegador.
+                                let useOverlay = false;
+                                let overlayNormX, overlayNormY, overlayNormW, overlayNormH;
+                                try {
+                                    const dispRect = displayRect;
+                                    // Preferir rect guardado en el momento de colocación (más estable)
+                                    if (s.debug && s.debug.overlayRect && dispRect && dispRect.width > 0 && dispRect.height > 0) {
+                                        const r = s.debug.overlayRect;
+                                        overlayNormX = (r.left - dispRect.left) / dispRect.width;
+                                        overlayNormY = (r.top - dispRect.top) / dispRect.height;
+                                        overlayNormW = r.width / dispRect.width;
+                                        overlayNormH = r.height / dispRect.height;
+                                        useOverlay = true;
+                                        this._logDebug('combineWithPDF.overlayCoords.usedSaved', { id: s.id, overlayNormX: overlayNormX.toFixed(4), overlayNormY: overlayNormY.toFixed(4) });
+                                    } else {
+                                        const sigEl = document.querySelector(`[data-signature-id="${s.id}"]`);
+                                        if (sigEl && dispRect && dispRect.width > 0 && dispRect.height > 0) {
+                                            const sigRect = sigEl.getBoundingClientRect();
+                                            overlayNormX = (sigRect.left - dispRect.left) / dispRect.width;
+                                            overlayNormY = (sigRect.top - dispRect.top) / dispRect.height;
+                                            overlayNormW = sigRect.width / dispRect.width;
+                                            overlayNormH = sigRect.height / dispRect.height;
+                                            useOverlay = true;
+                                            this._logDebug('combineWithPDF.overlayCoords.usedCurrent', { id: s.id, overlayNormX: overlayNormX.toFixed(4), overlayNormY: overlayNormY.toFixed(4) });
+                                        }
+                                    }
+                                } catch (overlayErr) {
+                                    console.warn('combineWithPDF: error al leer overlay coords', overlayErr);
+                                }
+
+                                const finalNormX = useOverlay ? overlayNormX : (typeof s.normX === 'number' ? s.normX : (s.x || 0) / canvas.width);
+                                const finalNormY = useOverlay ? overlayNormY : (typeof s.normY === 'number' ? s.normY : (s.y || 0) / canvas.height);
+                                const finalNormW = useOverlay ? overlayNormW : (typeof s.normWidth === 'number' ? s.normWidth : (s.width || img.naturalWidth) / canvas.width);
+                                const finalNormH = useOverlay ? overlayNormH : (typeof s.normHeight === 'number' ? s.normHeight : (s.height || img.naturalHeight) / canvas.height);
+
+                                let x = finalNormX * canvas.width;
+                                let y = finalNormY * canvas.height;
+                                let width = finalNormW * canvas.width;
+                                let height = finalNormH * canvas.height;
+
+                                // Asegurar tamaños mínimos
+                                width = Math.max(1, Math.round(width));
+                                height = Math.max(1, Math.round(height));
+
+                                // Si las coordenadas resultan estar completamente fuera del canvas
+                                // (ocurre si overlayRect está relative a otro contexto o hubo un scroll),
+                                // volver a intentar con las coordenadas normalizadas guardadas o con
+                                // la posición en px registrada previamente.
+                                const isOutside = (x + width <= 0) || (y + height <= 0) || (x >= canvas.width) || (y >= canvas.height);
+                                if (isOutside) {
+                                    this._logDebug('combineWithPDF.fallbackOutside', { id: s.id, x, y, width, height, canvasW: canvas.width, canvasH: canvas.height });
+                                    // Fallback a norm guardadas o a posiciones px escaladas
+                                    const fallbackNormX = (typeof s.normX === 'number') ? s.normX : ((s.x || 0) / canvas.width);
+                                    const fallbackNormY = (typeof s.normY === 'number') ? s.normY : ((s.y || 0) / canvas.height);
+                                    const fallbackNormW = (typeof s.normWidth === 'number') ? s.normWidth : ((s.width || img.naturalWidth) / canvas.width);
+                                    const fallbackNormH = (typeof s.normHeight === 'number') ? s.normHeight : ((s.height || img.naturalHeight) / canvas.height);
+                                    x = Math.round(fallbackNormX * canvas.width);
+                                    y = Math.round(fallbackNormY * canvas.height);
+                                    width = Math.max(1, Math.round(fallbackNormW * canvas.width));
+                                    height = Math.max(1, Math.round(fallbackNormH * canvas.height));
+                                    this._logDebug('combineWithPDF.fallbackApplied', { id: s.id, x, y, width, height });
+                                }
+
+                                // Aplicar compensación horizontal si el usuario la activó (útil para pruebas en móvil)
+                                const compPct = this._getCompensationPercent();
+                                if (compPct && compPct > 0) {
+                                    const compPx = Math.round(compPct * canvas.width);
+                                    this._logDebug('apply.compensation', { id: s.id, compPct, compPx });
+                                    // Restar la compensación en X (mover a la izquierda)
+                                    x -= compPx;
+                                }
+
+                                // Guardar info de export usado para debugging
+                                try {
+                                    s.debug = s.debug || {};
+                                    s.debug.export = { finalNormX, finalNormY, finalNormW, finalNormH, x, y, width, height };
+                                } catch (e) { /* noop */ }
 
                                 ctx.imageSmoothingEnabled = true;
                                 ctx.imageSmoothingQuality = 'high';
                                 console.log('combineWithPDF: dibujando firma', { id: s.id, page: p, x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height), useNorm: typeof s.normX === 'number' });
-                                ctx.drawImage(img, x, y, width, height);
+                                this._logDebug('combineWithPDF.draw', { id: s.id, page: p, x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
+                                // Si el usuario pidió ver marcadores de export, dibujar un marcador
+                                try {
+                                    if (this._shouldShowExportMarkers()) {
+                                        const markerLeft = Math.round((x / canvas.width) * viewerPixelWidth);
+                                        const markerTop = Math.round((y / canvas.height) * viewerPixelHeight);
+                                        const markerW = Math.round((width / canvas.width) * viewerPixelWidth);
+                                        const markerH = Math.round((height / canvas.height) * viewerPixelHeight);
+                                        const signatureLayer = document.getElementById('signatureLayer');
+                                        if (signatureLayer) {
+                                            const mk = document.createElement('div');
+                                            mk.className = 'export-debug-marker';
+                                            mk.style.left = markerLeft + 'px';
+                                            mk.style.top = markerTop + 'px';
+                                            mk.style.width = Math.max(2, markerW) + 'px';
+                                            mk.style.height = Math.max(2, markerH) + 'px';
+                                            signatureLayer.appendChild(mk);
+                                            setTimeout(() => { try { mk.remove(); } catch (e) {} }, 4000);
+                                            this._logDebug('export.marker.created', { id: s.id, markerLeft, markerTop, markerW, markerH });
+                                        }
+                                    }
+                                } catch (e) { console.warn('Error mostrando export marker', e); }
+
+                                try {
+                                    ctx.drawImage(img, x, y, width, height);
+                                } catch (drawErr) {
+                                    // Dibujar placeholder visible si falla
+                                    console.error('combineWithPDF: drawImage error', drawErr, { id: s.id, x, y, width, height });
+                                    this._logDebug('combineWithPDF.draw.error', { id: s.id, drawErr: String(drawErr) });
+                                    ctx.fillStyle = 'rgba(255,0,0,0.3)';
+                                    ctx.fillRect(Math.max(0, x), Math.max(0, y), Math.max(2, width), Math.max(2, height));
+                                    ctx.fillStyle = '#fff';
+                                    ctx.font = '12px Arial';
+                                    ctx.fillText('Firma', Math.max(2, x + 4), Math.max(14, y + 14));
+                                }
                             } catch (innerErr) {
                                 console.error('combineWithPDF: error dibujando firma fallback', innerErr, s);
                             }
@@ -6950,18 +7297,68 @@ class DocumentExportService {
                             await this.waitForImageLoad(imgSignature);
 
                             // Prefer normalized coordinates (norm*) si están disponibles
-                            const x = (typeof s.normX === 'number' ? s.normX * canvas.width : (s.x || 0) * scaleFactorX);
-                            const y = (typeof s.normY === 'number' ? s.normY * canvas.height : (s.y || 0) * scaleFactorY);
-                            const width = (typeof s.normWidth === 'number' ? s.normWidth * canvas.width : (s.width || imgSignature.naturalWidth) * scaleFactorX);
-                            const height = (typeof s.normHeight === 'number' ? s.normHeight * canvas.height : (s.height || imgSignature.naturalHeight) * scaleFactorY);
+                            let x = (typeof s.normX === 'number' ? s.normX * canvas.width : (s.x || 0) * scaleFactorX);
+                            let y = (typeof s.normY === 'number' ? s.normY * canvas.height : (s.y || 0) * scaleFactorY);
+                            let width = (typeof s.normWidth === 'number' ? s.normWidth * canvas.width : (s.width || imgSignature.naturalWidth) * scaleFactorX);
+                            let height = (typeof s.normHeight === 'number' ? s.normHeight * canvas.height : (s.height || imgSignature.naturalHeight) * scaleFactorY);
+
+                            const compPct = this._getCompensationPercent();
+                            if (compPct && compPct > 0) {
+                                const compPx = Math.round(compPct * canvas.width);
+                                this._logDebug('apply.compensation.image', { id: s.id, compPct, compPx });
+                                x -= compPx;
+                            }
+
+                            try { s.debug = s.debug || {}; s.debug.exportImage = { x, y, width, height }; } catch(e){}
 
                             ctx.imageSmoothingEnabled = true;
                             ctx.imageSmoothingQuality = 'high';
+                            // Comprobar si está fuera del canvas y fallback si es necesario
+                            const outOfBounds = (x + width <= 0) || (y + height <= 0) || (x >= canvas.width) || (y >= canvas.height);
+                            if (outOfBounds) {
+                                this._logDebug('combineWithImage.fallbackOutside', { id: s.id, x, y, width, height, canvasW: canvas.width, canvasH: canvas.height });
+                                const fallbackNormX = (typeof s.normX === 'number') ? s.normX : ((s.x || 0) / canvas.width);
+                                const fallbackNormY = (typeof s.normY === 'number') ? s.normY : ((s.y || 0) / canvas.height);
+                                const fallbackNormW = (typeof s.normWidth === 'number') ? s.normWidth : ((s.width || imgSignature.naturalWidth) / canvas.width);
+                                const fallbackNormH = (typeof s.normHeight === 'number') ? s.normHeight : ((s.height || imgSignature.naturalHeight) / canvas.height);
+                                x = Math.round(fallbackNormX * canvas.width);
+                                y = Math.round(fallbackNormY * canvas.height);
+                                width = Math.max(1, Math.round(fallbackNormW * canvas.width));
+                                height = Math.max(1, Math.round(fallbackNormH * canvas.height));
+                                this._logDebug('combineWithImage.fallbackApplied', { id: s.id, x, y, width, height });
+                            }
+
                             console.log('combineWithImage: dibujando firma', { id: s.id, page: DocumentService.currentPage, x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height), useNorm: typeof s.normX === 'number' });
+                            this._logDebug('combineWithImage.draw', { id: s.id, page: DocumentService.currentPage, x: Math.round(x), y: Math.round(y), width: Math.round(width), height: Math.round(height) });
                             try {
+                                if (this._shouldShowExportMarkers()) {
+                                    const signatureLayer = document.getElementById('signatureLayer');
+                                    if (signatureLayer) {
+                                        const mk = document.createElement('div');
+                                        const displayCanvas = document.getElementById('documentCanvas');
+                                        const dispRect = displayCanvas.getBoundingClientRect();
+                                        const markerLeft = Math.round((x / canvas.width) * dispRect.width);
+                                        const markerTop = Math.round((y / canvas.height) * dispRect.height);
+                                        const markerW = Math.round((width / canvas.width) * dispRect.width);
+                                        const markerH = Math.round((height / canvas.height) * dispRect.height);
+                                        mk.className = 'export-debug-marker';
+                                        mk.style.left = markerLeft + 'px';
+                                        mk.style.top = markerTop + 'px';
+                                        mk.style.width = Math.max(2, markerW) + 'px';
+                                        mk.style.height = Math.max(2, markerH) + 'px';
+                                        signatureLayer.appendChild(mk);
+                                        setTimeout(() => { try { mk.remove(); } catch (e) {} }, 4000);
+                                    }
+                                }
                                 ctx.drawImage(imgSignature, x, y, width, height);
                             } catch (drawErr) {
                                 console.error('Error dibujando imagen de firma en image canvas:', drawErr, { x, y, width, height, imgSrc: imgSignature.src });
+                                this._logDebug('combineWithImage.draw.error', { id: s.id, drawErr: String(drawErr) });
+                                ctx.fillStyle = 'rgba(255,0,0,0.3)';
+                                ctx.fillRect(Math.max(0, x), Math.max(0, y), Math.max(2, width), Math.max(2, height));
+                                ctx.fillStyle = '#fff';
+                                ctx.font = '12px Arial';
+                                ctx.fillText('Firma', Math.max(2, x + 4), Math.max(14, y + 14));
                             }
                         } catch (inner) {
                             console.warn('combineWithImage: fallo cargando firma', inner, s);
