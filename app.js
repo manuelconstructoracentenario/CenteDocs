@@ -5450,18 +5450,28 @@ class DocumentService {
         const containerWidth = viewerContent.clientWidth - 80;
         const containerHeight = viewerContent.clientHeight - 80;
         
-        let width = originalWidth;
-        let height = originalHeight;
-        
+        // Calcular escala inicial basada en el contenedor
         const scaleX = containerWidth / originalWidth;
         const scaleY = containerHeight / originalHeight;
-        const scale = Math.min(scaleX, scaleY, 1.5) * qualityMultiplier;
+        let scale = Math.min(scaleX, scaleY, 1.5) * qualityMultiplier;
         
         const minWidth = 600;
         const minHeight = 400;
         
-        width = Math.max(originalWidth * scale, minWidth);
-        height = Math.max(originalHeight * scale, minHeight);
+        // Ajustar escala si es necesario para cumplir con dimensiones mínimas
+        // (En lugar de ajustar width/height independientemente que rompe el aspect ratio)
+        if (originalWidth * scale < minWidth) {
+            scale = minWidth / originalWidth;
+        }
+        
+        // Si después de ajustar por ancho, el alto sigue siendo menor al mínimo
+        if (originalHeight * scale < minHeight) {
+            scale = Math.max(scale, minHeight / originalHeight);
+        }
+        
+        // Calcular dimensiones finales basadas en la escala unificada
+        const width = originalWidth * scale;
+        const height = originalHeight * scale;
         
         return { 
             width: Math.round(width), 
