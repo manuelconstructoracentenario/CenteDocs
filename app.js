@@ -5114,8 +5114,9 @@ class DocumentService {
     static startResizeTouch(e, element, signatureData) {
         const touch = e.touches[0];
         const canvas = document.getElementById('documentCanvas');
-        const handle = document.elementFromPoint((touch.pageX || touch.clientX), (touch.pageY || touch.clientY));
-        const handleClass = handle?.className || '';
+        // Use clientX/clientY (viewport coords) for elementFromPoint — pageX/pageY can be outside viewport
+        const handle = document.elementFromPoint(touch.clientX, touch.clientY);
+        const handleClass = handle?.className || ''; 
         const startCoords = canvas ? this.getPreciseTouchCoordinates(touch, canvas) : { displayX: touch.clientX, displayY: touch.clientY };
         const startX = startCoords.displayX;
         const startY = startCoords.displayY;
@@ -5160,7 +5161,6 @@ class DocumentService {
             
             // Convertir tamaño CSS a tamaño en píxeles del canvas
             try {
-                const canvas = document.getElementById('documentCanvas');
                 if (canvas) {
                     const rect = canvas.getBoundingClientRect();
                     const displayWidth = rect.width || parseFloat(canvas.style.width) || canvas.width;
@@ -5189,7 +5189,6 @@ class DocumentService {
             }
             // Guardar en coordenadas del canvas (píxeles reales), no en CSS
             try {
-                const canvas = document.getElementById('documentCanvas');
                 if (canvas) {
                     const rect = canvas.getBoundingClientRect();
                     const displayWidth = rect.width || parseFloat(canvas.style.width) || canvas.width;
@@ -6016,6 +6015,16 @@ class DocumentService {
         // Actualizar capa de firmas para coincidir con el tamaño escalado
         signatureLayer.style.width = displayWidth + 'px';
         signatureLayer.style.height = displayHeight + 'px';
+        // Alinear el overlay con la posición del canvas dentro del contenedor (considerar padding/margen)
+        try {
+            const parentRect = signatureLayer.parentElement.getBoundingClientRect();
+            signatureLayer.style.left = (displayRect.left - parentRect.left) + 'px';
+            signatureLayer.style.top = (displayRect.top - parentRect.top) + 'px';
+        } catch (err) {
+            // Si algo falla, dejar en 0,0
+            signatureLayer.style.left = '0px';
+            signatureLayer.style.top = '0px';
+        }
         
         // Reposicionar cada firma (usar norm* si existe)
         this.documentSignatures.forEach(signature => {
@@ -6047,8 +6056,15 @@ class DocumentService {
 
         const canvas = document.getElementById('documentCanvas');
         if (canvas) {
-            signatureLayer.style.width = canvas.style.width;
-            signatureLayer.style.height = canvas.style.height;
+            const rect = canvas.getBoundingClientRect();
+            const parentRect = signatureLayer.parentElement.getBoundingClientRect();
+            signatureLayer.style.width = rect.width + 'px';
+            signatureLayer.style.height = rect.height + 'px';
+            signatureLayer.style.left = (rect.left - parentRect.left) + 'px';
+            signatureLayer.style.top = (rect.top - parentRect.top) + 'px';
+        } else {
+            signatureLayer.style.left = '0px';
+            signatureLayer.style.top = '0px';
         }
 
         // Renderizar solo las firmas interactivas (no las "bakedIn")
