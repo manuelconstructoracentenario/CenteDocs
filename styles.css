@@ -4648,10 +4648,18 @@
     transform: translateZ(0);
 }
 
+/* Allow scrolling in the document viewer while in signature mode; avoid locking the entire page */
 body.signature-mode-active {
-    overflow: hidden;
-    position: fixed;
-    width: 100%;
+    position: static;
+    overflow: visible;
+}
+
+/* Ensure viewer content remains scrollable and touch-friendly when signing */
+body.signature-mode-active .viewer-content,
+body.signature-mode-active #documentContainer {
+    -webkit-overflow-scrolling: touch;
+    overflow: auto;
+    touch-action: manipulation;
 }
 
 /* Firmas seleccionadas */
