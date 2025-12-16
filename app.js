@@ -6912,12 +6912,19 @@ class DocumentExportService {
                     }
 
                     // Añadir página al jsPDF
+                    const isLandscape = canvas.width > canvas.height;
+                    const orientation = isLandscape ? 'landscape' : 'portrait';
+
                     if (!pdfOutput) {
-                        pdfOutput = new jsPDF({ orientation: canvas.width > canvas.height ? 'landscape' : 'portrait', unit: 'px', format: [canvas.width, canvas.height] });
+                        pdfOutput = new jsPDF({ 
+                            orientation: orientation, 
+                            unit: 'px', 
+                            format: [canvas.width, canvas.height] 
+                        });
                         const imgData = canvas.toDataURL('image/png', 1.0);
                         pdfOutput.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height, undefined, 'FAST');
                     } else {
-                        pdfOutput.addPage([canvas.width, canvas.height]);
+                        pdfOutput.addPage([canvas.width, canvas.height], orientation);
                         const imgData = canvas.toDataURL('image/png', 1.0);
                         pdfOutput.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height, undefined, 'FAST');
                     }
