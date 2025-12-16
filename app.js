@@ -5012,9 +5012,6 @@ class DocumentService {
         element._mouseHandler = mouseHandler;
         element._touchHandler = touchHandler;
         
-        // Marcar para CSS de móvil
-        element.classList.add('mobile-touch-enabled');
-
         element.addEventListener('mousedown', mouseHandler);
         element.addEventListener('touchstart', touchHandler, { passive: false });
         
@@ -5031,7 +5028,7 @@ class DocumentService {
     static startDragTouch(e, element, signatureData) {
         const touch = e.touches[0];
         const canvas = document.getElementById('documentCanvas');
-        const startCoords = canvas ? this.getMobileTouchCoordinates(touch, canvas) : { displayX: touch.clientX, displayY: touch.clientY };
+        const startCoords = canvas ? this.getPreciseTouchCoordinates(touch, canvas) : { displayX: touch.clientX, displayY: touch.clientY };
         const startX = startCoords.displayX;
         const startY = startCoords.displayY;
         const startLeft = parseFloat(element.style.left) || 0;
@@ -5039,7 +5036,7 @@ class DocumentService {
         
         const dragMove = (moveEvent) => {
             const currentTouch = moveEvent.touches[0];
-            const curCoords = canvas ? this.getMobileTouchCoordinates(currentTouch, canvas) : { displayX: currentTouch.clientX, displayY: currentTouch.clientY };
+            const curCoords = canvas ? this.getPreciseTouchCoordinates(currentTouch, canvas) : { displayX: currentTouch.clientX, displayY: currentTouch.clientY };
             const dx = curCoords.displayX - startX;
             const dy = curCoords.displayY - startY;
             
@@ -5120,7 +5117,7 @@ class DocumentService {
         // Use clientX/clientY (viewport coords) for elementFromPoint — pageX/pageY can be outside viewport
         const handle = document.elementFromPoint(touch.clientX, touch.clientY);
         const handleClass = handle?.className || ''; 
-        const startCoords = canvas ? this.getMobileTouchCoordinates(touch, canvas) : { displayX: touch.clientX, displayY: touch.clientY };
+        const startCoords = canvas ? this.getPreciseTouchCoordinates(touch, canvas) : { displayX: touch.clientX, displayY: touch.clientY };
         const startX = startCoords.displayX;
         const startY = startCoords.displayY;
         const startWidth = parseFloat(element.style.width) || element.offsetWidth;
@@ -5133,7 +5130,7 @@ class DocumentService {
         
         const resizeMove = (moveEvent) => {
             const currentTouch = moveEvent.touches[0];
-            const curCoords = canvas ? this.getMobileTouchCoordinates(currentTouch, canvas) : { displayX: currentTouch.clientX, displayY: currentTouch.clientY };
+            const curCoords = canvas ? this.getPreciseTouchCoordinates(currentTouch, canvas) : { displayX: currentTouch.clientX, displayY: currentTouch.clientY };
             const dx = curCoords.displayX - startX;
             const dy = curCoords.displayY - startY;
             
@@ -5799,19 +5796,19 @@ class DocumentService {
                 clientY = 0;
             }
 
+            const zoom = this.currentZoom || 1.0;
+
             const canvasDisplayWidth = rect.width;
             const canvasDisplayHeight = rect.height;
 
             const canvasPixelWidth = canvas.width;
             const canvasPixelHeight = canvas.height;
 
-            // Display coordinates relative to the canvas' bounding rect (CSS pixels)
-            const displayX = (clientX - rect.left);
-            const displayY = (clientY - rect.top);
+            const scaleX = canvasPixelWidth / canvasDisplayWidth;
+            const scaleY = canvasPixelHeight / canvasDisplayHeight;
 
-            // Map display (CSS) pixels to canvas pixel coordinates
-            const scaleX = (canvasDisplayWidth > 0) ? (canvasPixelWidth / canvasDisplayWidth) : 1;
-            const scaleY = (canvasDisplayHeight > 0) ? (canvasPixelHeight / canvasDisplayHeight) : 1;
+            const displayX = (clientX - rect.left) * (1 / zoom);
+            const displayY = (clientY - rect.top) * (1 / zoom);
 
             const pixelX = displayX * scaleX;
             const pixelY = displayY * scaleY;
@@ -6661,9 +6658,9 @@ class DocumentService {
                 console.log(`📍 Usando posición del usuario: (${Math.round(manualX)}, ${Math.round(manualY)})`);
                 const canvas = document.getElementById('documentCanvas');
                 if (canvas) {
-                    // manualX/manualY are expected to be in canvas pixel coordinates (no extra zoom adjustment needed)
-                    const adjustedX = manualX;
-                    const adjustedY = manualY;
+                    const zoom = this.currentZoom || 1.0;
+                    const adjustedX = manualX / zoom;
+                    const adjustedY = manualY / zoom;
 
                     const maxX = canvas.width - 150;
                     const maxY = canvas.height - 60;
@@ -6675,7 +6672,7 @@ class DocumentService {
                         confidence: 1.0
                     };
 
-                    console.log('📱 Posición ajustada (canvas pixels):', position);
+                    console.log('📱 Posición ajustada para dispositivo móvil/escalado:', position);
                 } else {
                     position = {
                         x: manualX,
