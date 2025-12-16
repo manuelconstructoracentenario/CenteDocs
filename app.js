@@ -5027,21 +5027,23 @@ class DocumentService {
     // ===========================================
     static startDragTouch(e, element, signatureData) {
         const touch = e.touches[0];
-        const startX = touch.clientX;
-        const startY = touch.clientY;
+        const canvas = document.getElementById('documentCanvas');
+        const startCoords = canvas ? this.getPreciseTouchCoordinates(touch, canvas) : { displayX: touch.clientX, displayY: touch.clientY };
+        const startX = startCoords.displayX;
+        const startY = startCoords.displayY;
         const startLeft = parseFloat(element.style.left) || 0;
         const startTop = parseFloat(element.style.top) || 0;
         
         const dragMove = (moveEvent) => {
             const currentTouch = moveEvent.touches[0];
-            const dx = currentTouch.clientX - startX;
-            const dy = currentTouch.clientY - startY;
+            const curCoords = canvas ? this.getPreciseTouchCoordinates(currentTouch, canvas) : { displayX: currentTouch.clientX, displayY: currentTouch.clientY };
+            const dx = curCoords.displayX - startX;
+            const dy = curCoords.displayY - startY;
             
             let newLeft = startLeft + dx;
             let newTop = startTop + dy;
             
             // Limitar al canvas
-            const canvas = document.getElementById('documentCanvas');
             if (canvas) {
                 const rect = canvas.getBoundingClientRect();
                 const elementRect = element.getBoundingClientRect();
@@ -5111,11 +5113,12 @@ class DocumentService {
     // ===========================================
     static startResizeTouch(e, element, signatureData) {
         const touch = e.touches[0];
-        const handle = document.elementFromPoint(touch.clientX, touch.clientY);
+        const canvas = document.getElementById('documentCanvas');
+        const handle = document.elementFromPoint((touch.pageX || touch.clientX), (touch.pageY || touch.clientY));
         const handleClass = handle?.className || '';
-        
-        const startX = touch.clientX;
-        const startY = touch.clientY;
+        const startCoords = canvas ? this.getPreciseTouchCoordinates(touch, canvas) : { displayX: touch.clientX, displayY: touch.clientY };
+        const startX = startCoords.displayX;
+        const startY = startCoords.displayY;
         const startWidth = parseFloat(element.style.width) || element.offsetWidth;
         const startHeight = parseFloat(element.style.height) || element.offsetHeight;
         const startLeft = parseFloat(element.style.left) || 0;
@@ -5126,8 +5129,9 @@ class DocumentService {
         
         const resizeMove = (moveEvent) => {
             const currentTouch = moveEvent.touches[0];
-            const dx = currentTouch.clientX - startX;
-            const dy = currentTouch.clientY - startY;
+            const curCoords = canvas ? this.getPreciseTouchCoordinates(currentTouch, canvas) : { displayX: currentTouch.clientX, displayY: currentTouch.clientY };
+            const dx = curCoords.displayX - startX;
+            const dy = curCoords.displayY - startY;
             
             let newWidth = startWidth;
             let newHeight = startHeight;
@@ -5738,6 +5742,40 @@ class DocumentService {
         }
     }
 
+    // ==============================
+    // MÓVIL: Obtener coordenadas precisas
+    // ==============================
+    static getPreciseTouchCoordinates(touch, canvas) {
+        try {
+            const rect = canvas.getBoundingClientRect();
+
+            // pageX/pageY y considerar scroll son más fiables en móviles
+            const pageX = (touch.pageX !== undefined) ? touch.pageX - window.scrollX : (touch.clientX - window.scrollX);
+            const pageY = (touch.pageY !== undefined) ? touch.pageY - window.scrollY : (touch.clientY - window.scrollY);
+
+            const displayX = pageX - rect.left;
+            const displayY = pageY - rect.top;
+
+            // Mapping de display (CSS) -> canvas pixel
+            const scaleX = rect.width > 0 ? (canvas.width / rect.width) : 1;
+            const scaleY = rect.height > 0 ? (canvas.height / rect.height) : 1;
+
+            const x = displayX * scaleX;
+            const y = displayY * scaleY;
+
+            return {
+                x: Math.max(0, x),
+                y: Math.max(0, y),
+                displayX: displayX,
+                displayY: displayY,
+                scaleX, scaleY
+            };
+        } catch (err) {
+            console.warn('getPreciseTouchCoordinates error', err);
+            return { x: 0, y: 0, displayX: 0, displayY: 0, scaleX: 1, scaleY: 1 };
+        }
+    }
+
     static showPDFFallback(canvas, ctx) {
         const optimalSize = this.calculateOptimalDocumentSize(800, 1000);
         canvas.width = optimalSize.width;
@@ -5955,10 +5993,21 @@ class DocumentService {
         const signatureLayer = document.getElementById('signatureLayer');
         if (!canvas || !signatureLayer) return;
         
-        // Usar getBoundingClientRect para obtener dimensiones reales de visualización
+        // Obtener dimensiones de visualización (considerar transform CSS cuando exista)
         const displayRect = canvas.getBoundingClientRect();
-        const displayWidth = displayRect.width;
-        const displayHeight = displayRect.height;
+        const computedStyle = window.getComputedStyle(canvas);
+        const transform = computedStyle?.transform || 'none';
+
+        let displayWidth, displayHeight;
+        if (transform && transform !== 'none') {
+            // Cuando hay transform CSS (scale), el bounding rect ya refleja la escala
+            displayWidth = displayRect.width;
+            displayHeight = displayRect.height;
+        } else {
+            // Sin transform, preferir offsetWidth/offsetHeight (layout size)
+            displayWidth = canvas.offsetWidth || displayRect.width;
+            displayHeight = canvas.offsetHeight || displayRect.height;
+        }
 
         // El canvas.width/height son las dimensiones en píxeles de la superficie de dibujo
         const pixelWidth = canvas.width;
@@ -6280,18 +6329,15 @@ class DocumentService {
             console.log('%c✅ Condiciones válidas (touch), procesando', 'color: #4caf50; font-weight: bold');
             
             const touch = e.changedTouches[0];
-            const rect = canvas.getBoundingClientRect();
-            
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
-            
-            const displayX = touch.clientX - rect.left;
-            const displayY = touch.clientY - rect.top;
-            const x = displayX * scaleX;
-            const y = displayY * scaleY;
-            
-            console.log(`%c📍 Display coords: (${Math.round(displayX)}, ${Math.round(displayY)})`, 'color: #ff9800');
-            console.log(`%c📍 Pixel coords: (${Math.round(x)}, ${Math.round(y)})`, 'color: #ff9800; font-weight: bold');
+            // Usar helper para coordenadas precisas en móvil (pageX/pageY + scroll)
+            const coords = this.getPreciseTouchCoordinates(touch, canvas);
+            const displayX = coords.displayX;
+            const displayY = coords.displayY;
+            const x = coords.x;
+            const y = coords.y;
+
+            console.log(`%c📍 Display coords (móvil): (${Math.round(displayX)}, ${Math.round(displayY)})`, 'color: #ff9800');
+            console.log(`%c📍 Pixel coords (móvil): (${Math.round(x)}, ${Math.round(y)})`, 'color: #ff9800; font-weight: bold');
             
             // Prevenir scroll
             e.stopPropagation();
@@ -6305,7 +6351,7 @@ class DocumentService {
             
             // Remover listeners
             document.removeEventListener('click', clickHandler, true);
-            document.removeEventListener('touchend', touchHandler, true);
+            document.removeEventListener('touchend', touchHandler, { passive: false, capture: true });
             console.log('%c✓ Listeners removidos del document', 'color: #ff9800');
             
             // Agregar firma CON DELAY
@@ -6474,6 +6520,26 @@ class DocumentService {
                 fieldType: position.fieldType
             };
             
+            // Log de diagnóstico: coordenadas y normalizadas (útil para móvil con zoom)
+            try {
+                const rect = document.getElementById('documentCanvas')?.getBoundingClientRect();
+                console.log('📝 Firma creada:', {
+                    id: signature.id,
+                    page: signature.page,
+                    x: Math.round(signature.x),
+                    y: Math.round(signature.y),
+                    width: Math.round(signature.width),
+                    height: Math.round(signature.height),
+                    normX: signature.normX,
+                    normY: signature.normY,
+                    normWidth: signature.normWidth,
+                    normHeight: signature.normHeight,
+                    canvasRect: rect ? { left: Math.round(rect.left), top: Math.round(rect.top), width: Math.round(rect.width), height: Math.round(rect.height) } : null
+                });
+            } catch (logErr) {
+                console.warn('Error log firma:', logErr);
+            }
+
             // Agregar firma a la lista
             this.documentSignatures.push(signature);
             if (this.currentDocument) {

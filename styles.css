@@ -4634,6 +4634,26 @@
     -webkit-tap-highlight-color: transparent !important;
 }
 
+/* Mejores interacciones táctiles para canvas y capas de firma */
+#documentCanvas, #signatureLayer {
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.document-signature {
+    touch-action: none;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+}
+
+body.signature-mode-active {
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+}
+
 /* Firmas seleccionadas */
 .document-signature.selected {
     border: 2px solid #599d5e !important;
