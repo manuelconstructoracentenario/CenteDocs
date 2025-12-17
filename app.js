@@ -5793,12 +5793,13 @@ class DocumentService {
         try {
             const rect = canvas.getBoundingClientRect();
 
-            // pageX/pageY y considerar scroll son más fiables en móviles
-            const pageX = (touch.pageX !== undefined) ? touch.pageX - window.scrollX : (touch.clientX - window.scrollX);
-            const pageY = (touch.pageY !== undefined) ? touch.pageY - window.scrollY : (touch.clientY - window.scrollY);
+            // pageX/pageY incluyen el scroll; clientX/clientY no.
+            // Convertir a coordenadas de viewport correctamente sin doble restar scroll.
+            const clientX = (touch.pageX !== undefined) ? (touch.pageX - window.scrollX) : touch.clientX;
+            const clientY = (touch.pageY !== undefined) ? (touch.pageY - window.scrollY) : touch.clientY;
 
-            const displayX = pageX - rect.left;
-            const displayY = pageY - rect.top;
+            const displayX = clientX - rect.left;
+            const displayY = clientY - rect.top;
 
             // Mapping de display (CSS) -> canvas pixel
             const scaleX = rect.width > 0 ? (canvas.width / rect.width) : 1;
