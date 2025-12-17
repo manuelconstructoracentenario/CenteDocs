@@ -1225,8 +1225,9 @@
 
     .files-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
         gap: 20px;
+        width: 100%;
     }
 
     .file-card {
@@ -3224,9 +3225,10 @@
     /* Ajustar el grid para las nuevas secciones */
     .files-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
         gap: 20px;
         margin-top: 10px;
+        width: 100%;
     }
 
     .file-card {
@@ -3277,7 +3279,7 @@
     /* Responsive */
     @media (max-width: 768px) {
         .files-grid {
-            grid-template-columns: 1fr;
+            grid-template-columns: repeat(1, minmax(0, 1fr));
         }
         
         .section-header {
@@ -3412,9 +3414,10 @@
     /* Mejorar el grid de archivos */
     .files-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
         gap: 20px;
         margin-top: 10px;
+        width: 100%;
     }
 
     .file-card {
@@ -3535,7 +3538,7 @@
     /* Responsive */
     @media (max-width: 768px) {
         .files-grid {
-            grid-template-columns: 1fr;
+            grid-template-columns: repeat(1, minmax(0, 1fr));
         }
         
         .section-header {
