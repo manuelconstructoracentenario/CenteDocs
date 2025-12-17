@@ -1814,8 +1814,8 @@ class DocumentService {
                     resolve({
                         x: bestLine.x,
                         y: bestLine.y,
-                        width: 150,
-                        height: 60,
+                        width: 90,
+                        height: 36,
                         fieldType: 'horizontal_line',
                         confidence: 0.9,
                         reason: `Línea horizontal encontrada en Y=${bestLine.lineY}`
@@ -1833,8 +1833,8 @@ class DocumentService {
                     resolve({
                         x: bestSpot.x,
                         y: bestSpot.y,
-                        width: 150,
-                        height: 60,
+                        width: 90,
+                        height: 36,
                         fieldType: 'empty_space',
                         confidence: 0.8,
                         reason: `Espacio vacío detectado (${bestSpot.emptyPercent}% vacío)`
@@ -1849,8 +1849,8 @@ class DocumentService {
                 resolve({
                     x: fallbackPosition.x,
                     y: fallbackPosition.y,
-                    width: 150,
-                    height: 60,
+                    width: 90,
+                    height: 36,
                     fieldType: 'fallback',
                     confidence: 0.6,
                     reason: 'Posición basada en tipo de documento'
@@ -1862,8 +1862,8 @@ class DocumentService {
                 resolve({
                     x: 200,
                     y: 200,
-                    width: 150,
-                    height: 60,
+                    width: 90,
+                    height: 36,
                     fieldType: 'error_fallback',
                     confidence: 0.1,
                     reason: 'Error en análisis, usando posición predeterminada'
@@ -1909,9 +1909,9 @@ class DocumentService {
                     const spaceAboveY = Math.max(0, y - 70);
                     let spaceEmpty = true;
                     
-                    // Verificar espacio de 150x60px encima de la línea
+                    // Verificar espacio de 90x36px encima de la línea
                     for (let sy = spaceAboveY; sy < y && spaceEmpty; sy += 5) {
-                        for (let sx = startX; sx < startX + 150 && sx < width; sx += 5) {
+                        for (let sx = startX; sx < startX + 90 && sx < width; sx += 5) {
                             try {
                                 const pixel = ctx.getImageData(sx, sy, 1, 1).data;
                                 const brightness = (pixel[0] + pixel[1] + pixel[2]) / 3;
@@ -2464,7 +2464,7 @@ class DocumentService {
         for (let y = bottomArea.y; y < bottomArea.y + bottomArea.height; y += gridSpacing) {
             for (let x = 0; x < bottomArea.width; x += gridSpacing) {
                 // VERIFICAR SI HAY UN CUADRO EN ESTA POSICIÓN
-                const hasBox = this.detectBoxAtPosition(ctx, x, y, 150, 60);
+                const hasBox = this.detectBoxAtPosition(ctx, x, y, 90, 36);
                 
                 if (hasBox) {
                     // EL CENTRO DEL CUADRO ES BUEN LUGAR PARA UNA FIRMA
@@ -2528,7 +2528,7 @@ class DocumentService {
         // VERIFICAR CADA ZONA PARA CONTENIDO
         structuralZones.forEach(zone => {
             // VERIFICAR SI LA ZONA ESTÁ RELATIVAMENTE VACÍA
-            const isEmpty = this.isAreaEmptyDetailed(ctx, zone.x, zone.y, 150, 60, 0.7);
+            const isEmpty = this.isAreaEmptyDetailed(ctx, zone.x, zone.y, 90, 36, 0.7);
             
             if (isEmpty) {
                 spots.push({
@@ -2635,13 +2635,13 @@ class DocumentService {
             for (const sig of this.documentSignatures) {
                 const sigX = sig.x;
                 const sigY = sig.y;
-                const sigWidth = sig.width || 150;
-                const sigHeight = sig.height || 60;
+                const sigWidth = sig.width || 90;
+                const sigHeight = sig.height || 36;
                 
                 const spotX = spot.x;
                 const spotY = spot.y;
-                const spotWidth = spot.width || 150;
-                const spotHeight = spot.height || 60;
+                const spotWidth = spot.width || 90;
+                const spotHeight = spot.height || 36;
                 
                 // VERIFICAR SUPERPOSICIÓN
                 const overlap = !(spotX + spotWidth < sigX ||
@@ -2678,7 +2678,7 @@ class DocumentService {
             // VERIFICAR SI EL ÁREA ESTÁ VACÍA
             let isEmpty = true;
             for (let dy = 0; dy < 60; dy += 10) {
-                for (let dx = 0; dx < 150; dx += 10) {
+                for (let dx = 0; dx < 90; dx += 10) {
                     const x = zone.x + dx;
                     const y = zone.y + dy;
                     
@@ -2800,15 +2800,15 @@ class DocumentService {
         console.log('🚨 BÚSQUEDA DE EMERGENCIA DE ESPACIOS...');
         
         // ESCANEAR SISTEMÁTICAMENTE TODO EL DOCUMENTO
-        for (let y = 0; y < height - 60; y += 10) {
-            for (let x = 0; x < width - 150; x += 10) {
+        for (let y = 0; y < height - 36; y += 10) {
+            for (let x = 0; x < width - 90; x += 10) {
                 let emptyCount = 0;
                 let totalCount = 0;
                 
                 // VERIFICAR 10 PUNTOS ALEATORIOS EN EL ÁREA
                 for (let i = 0; i < 10; i++) {
-                    const rx = x + Math.floor(Math.random() * 150);
-                    const ry = y + Math.floor(Math.random() * 60);
+                    const rx = x + Math.floor(Math.random() * 90);
+                    const ry = y + Math.floor(Math.random() * 36);
                     
                     if (rx < width && ry < height) {
                         const pixel = ctx.getImageData(rx, ry, 1, 1).data;
@@ -2857,10 +2857,10 @@ class DocumentService {
             ctx.strokeStyle = index === 0 ? '#00ff00' : '#ffff00';
             ctx.lineWidth = 2;
             ctx.strokeRect(
-                spot.x - (spot.width || 150) / 2,
-                spot.y - (spot.height || 60) / 2,
-                spot.width || 150,
-                spot.height || 60
+                spot.x - (spot.width || 90) / 2,
+                spot.y - (spot.height || 36) / 2,
+                spot.width || 90,
+                spot.height || 36
             );
         });
         
@@ -3012,8 +3012,8 @@ class DocumentService {
             
             for (let y = bottomScanY; y < bottomScanY + bottomScanHeight; y += scanStep) {
                 for (let x = 50; x < width - 200; x += scanStep) {
-                    // Verificar área de 150x60px
-                    if (this.isAreaTrulyEmpty(ctx, x, y, 150, 60)) {
+                    // Verificar área de 90x36px
+                    if (this.isAreaTrulyEmpty(ctx, x, y, 90, 36)) {
                         console.log(`✅ Espacio encontrado en (${x}, ${y})`);
                         return {
                             found: true,
@@ -3191,7 +3191,7 @@ class DocumentService {
             
             for (const pos of positions) {
                 // Verificar si hay espacio para una firma
-                if (this.isAreaTrulyEmpty(ctx, pos.x, pos.y, 150, 60)) {
+                if (this.isAreaTrulyEmpty(ctx, pos.x, pos.y, 110, 45)) {
                     return {
                         found: true,
                         x: pos.x,
@@ -3221,7 +3221,7 @@ class DocumentService {
             if (this.isAreaTrulyEmpty(ctx, startX, startY, spaceWidth, spaceHeight)) {
                 return {
                     found: true,
-                    x: startX + (spaceWidth / 2) - 75, // Centrar la firma
+                    x: startX + (spaceWidth / 2) - 45, // Centrar la firma
                     y: startY + 10
                 };
             }
@@ -3245,22 +3245,22 @@ class DocumentService {
             // Documento horizontal (contratos, facturas)
             console.log('📄 Documento horizontal detectado - colocando en esquina inferior derecha');
             return { 
-                x: width * 0.75 - 100, 
-                y: height * 0.85 - 30 
+                x: width * 0.75 - 45, 
+                y: height * 0.85 - 18 
             };
         } else if (aspectRatio < 0.8) {
             // Documento vertical estrecho (recibos, tickets)
             console.log('📄 Documento vertical estrecho detectado - colocando en esquina inferior izquierda');
             return { 
                 x: width * 0.15, 
-                y: height * 0.85 - 30 
+                y: height * 0.85 - 18 
             };
         } else {
             // Documento estándar (cartas, informes)
             console.log('📄 Documento estándar detectado - colocando en esquina inferior derecha');
             return { 
-                x: width * 0.7 - 100, 
-                y: height * 0.88 - 30 
+                x: width * 0.7 - 45, 
+                y: height * 0.88 - 18 
             };
         }
     }
@@ -3842,8 +3842,8 @@ class DocumentService {
             ];
             
             for (const pos of positions) {
-                // Verificar si hay espacio para una firma (150x60)
-                if (this.isAreaEmptyForSignature(ctx, pos.x, pos.y, 150, 60)) {
+                // Verificar si hay espacio para una firma (90x36)
+                if (this.isAreaEmptyForSignature(ctx, pos.x, pos.y, 90, 36)) {
                     return {
                         found: true,
                         x: pos.x,
@@ -3990,8 +3990,8 @@ class DocumentService {
                 height: height * 0.15
             };
             
-            // Buscar espacio para firma de 150x60
-            const spaceNeeded = { width: 150, height: 60 };
+            // Buscar espacio para firma de 90x36
+            const spaceNeeded = { width: 90, height: 36 };
             
             for (let y = searchArea.y; y < searchArea.y + searchArea.height - spaceNeeded.height; y += 10) {
                 for (let x = searchArea.x; x < searchArea.x + searchArea.width - spaceNeeded.width; x += 10) {
@@ -4026,8 +4026,8 @@ class DocumentService {
                 height: height * 0.15
             };
             
-            // Buscar espacio para firma de 150x60
-            const spaceNeeded = { width: 150, height: 60 };
+            // Buscar espacio para firma de 90x36
+            const spaceNeeded = { width: 90, height: 36 };
             
             for (let y = searchArea.y; y < searchArea.y + searchArea.height - spaceNeeded.height; y += 10) {
                 for (let x = searchArea.x; x < searchArea.x + searchArea.width - spaceNeeded.width; x += 10) {
@@ -4822,7 +4822,7 @@ class DocumentService {
     static findBoxedSignatureArea(ctx, area) {
         try {
             // Buscar rectángulos vacíos
-            const boxSize = 150; // Tamaño típico de caja de firma
+            const boxSize = 90; // Tamaño típico de caja de firma
             
             // Posiciones comunes para cajas de firma
             const possiblePositions = [
@@ -4833,11 +4833,11 @@ class DocumentService {
             
             for (const pos of possiblePositions) {
                 // Verificar si el área está vacía
-                const isEmpty = this.checkAreaEmpty(ctx, pos.x, pos.y, boxSize, 60);
+                const isEmpty = this.checkAreaEmpty(ctx, pos.x, pos.y, boxSize, 36);
                 
                 if (isEmpty) {
                     // Verificar bordes (líneas horizontales arriba y abajo)
-                    const hasBorders = this.checkAreaBorders(ctx, pos.x, pos.y, boxSize, 60);
+                    const hasBorders = this.checkAreaBorders(ctx, pos.x, pos.y, boxSize, 36);
                     
                     if (hasBorders) {
                         return {
@@ -4845,7 +4845,7 @@ class DocumentService {
                             x: pos.x + 10,
                             y: pos.y + 10,
                             width: boxSize,
-                            height: 60
+                            height: 36
                         };
                     }
                 }
@@ -5000,11 +5000,11 @@ class DocumentService {
                 const touchX = touch.clientX;
                 const touchY = touch.clientY;
                 
-                // Buscar handles cercanos (radio de 40px)
+                // Buscar handles cercanos (radio de 60px)
                 // Esto soluciona el problema de "dedo gordo" y z-index
                 const handles = element.querySelectorAll('.signature-handle');
                 let closestHandle = null;
-                let minDistance = 40; // Radio de búsqueda generoso
+                let minDistance = 60; // Radio de búsqueda generoso
                 
                 handles.forEach(handle => {
                     const rect = handle.getBoundingClientRect();
@@ -5130,11 +5130,16 @@ class DocumentService {
     // ===========================================
     // NUEVO: REDIMENSIÓN NATIVA PARA TOUCH
     // ===========================================
-    static startResizeTouch(e, element, signatureData) {
+    static startResizeTouch(e, element, signatureData, passedHandle) {
         const touch = e.touches[0];
         const canvas = document.getElementById('documentCanvas');
-        const handle = document.elementFromPoint((touch.pageX || touch.clientX), (touch.pageY || touch.clientY));
-        const handleClass = handle?.className || '';
+        // Usar el handle detectado previamente si está disponible
+        let handleClass = passedHandle?.className || '';
+        if (!handleClass) {
+            // elementFromPoint requiere coordenadas de viewport (clientX/clientY)
+            const handle = document.elementFromPoint(touch.clientX, touch.clientY);
+            handleClass = handle?.className || '';
+        }
         const startCoords = canvas ? this.getPreciseTouchCoordinates(touch, canvas) : { displayX: touch.clientX, displayY: touch.clientY };
         const startX = startCoords.displayX;
         const startY = startCoords.displayY;
@@ -6479,8 +6484,8 @@ class DocumentService {
             }
             
             // Calcular tamaño de la firma
-            let width = 150;
-            let height = 60;
+            let width = 90;
+            let height = 36;
             
             if (this.currentSignature.type === 'upload') {
                 const img = new Image();
@@ -6494,8 +6499,8 @@ class DocumentService {
                 width = img.naturalWidth;
                 height = img.naturalHeight;
                 
-                const maxWidth = 200;
-                const maxHeight = 80;
+                const maxWidth = 110;
+                const maxHeight = 45;
                 
                 if (width > maxWidth || height > maxHeight) {
                     const ratio = Math.min(maxWidth / width, maxHeight / height);
@@ -7818,16 +7823,16 @@ class SignatureFieldDetector {
             return {
                 x: width * 0.75 - 75,
                 y: height * 0.85 - 30,
-                width: 150,
-                height: 60
+                width: 90,
+                height: 36
             };
         } else {
             // Vertical
             return {
                 x: width * 0.65 - 75,
                 y: height * 0.88 - 30,
-                width: 150,
-                height: 60
+                width: 90,
+                height: 36
             };
         }
     }
