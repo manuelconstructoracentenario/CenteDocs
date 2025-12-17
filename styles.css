@@ -118,6 +118,29 @@
         box-shadow: 0 0 0 3px rgba(89, 157, 94, 0.1);
     }
 
+    .password-wrapper {
+        position: relative;
+    }
+    .password-wrapper .form-control {
+        padding-right: 42px;
+    }
+    .password-toggle {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: transparent;
+        border: none;
+        color: var(--gray);
+        cursor: pointer;
+        padding: 6px;
+        border-radius: 6px;
+    }
+    .password-toggle:focus {
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(89, 157, 94, 0.1);
+    }
+
     /* Main App */
     .app-container {
         display: none;

@@ -8235,6 +8235,17 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    const togglePassword = document.getElementById('togglePassword');
+    if (togglePassword) {
+        togglePassword.addEventListener('click', function() {
+            const input = document.getElementById('password');
+            if (!input) return;
+            const isText = input.type === 'text';
+            input.type = isText ? 'password' : 'text';
+            const icon = this.querySelector('i');
+            if (icon) icon.className = isText ? 'fas fa-eye' : 'fas fa-eye-slash';
+        });
+    }
     
     const registerBtn = document.getElementById('registerBtn');
     if (registerBtn) {
