@@ -5135,11 +5135,17 @@ class DocumentService {
         const canvas = document.getElementById('documentCanvas');
         // Usar el handle detectado previamente si está disponible
         let handleClass = passedHandle?.className || '';
+        let classListArr = Array.isArray(passedHandle?.classList) ? Array.from(passedHandle.classList) : (handleClass ? handleClass.split(' ') : []);
         if (!handleClass) {
             // elementFromPoint requiere coordenadas de viewport (clientX/clientY)
             const handle = document.elementFromPoint(touch.clientX, touch.clientY);
             handleClass = handle?.className || '';
+            classListArr = Array.isArray(handle?.classList) ? Array.from(handle.classList) : (handleClass ? handleClass.split(' ') : []);
         }
+        const isRight = classListArr.includes('handle-right') || classListArr.includes('handle-top-right') || classListArr.includes('handle-bottom-right');
+        const isLeft = classListArr.includes('handle-left') || classListArr.includes('handle-top-left') || classListArr.includes('handle-bottom-left');
+        const isTop = classListArr.includes('handle-top') || classListArr.includes('handle-top-left') || classListArr.includes('handle-top-right');
+        const isBottom = classListArr.includes('handle-bottom') || classListArr.includes('handle-bottom-left') || classListArr.includes('handle-bottom-right');
         const startCoords = canvas ? this.getPreciseTouchCoordinates(touch, canvas) : { displayX: touch.clientX, displayY: touch.clientY };
         const startX = startCoords.displayX;
         const startY = startCoords.displayY;
@@ -5162,17 +5168,17 @@ class DocumentService {
             let newLeft = startLeft;
             let newTop = startTop;
             
-            if (handleClass.includes('handle-right')) {
+            if (isRight) {
                 newWidth = Math.max(minWidth, startWidth + dx);
             }
-            if (handleClass.includes('handle-left')) {
+            if (isLeft) {
                 newWidth = Math.max(minWidth, startWidth - dx);
                 newLeft = startLeft + dx;
             }
-            if (handleClass.includes('handle-bottom')) {
+            if (isBottom) {
                 newHeight = Math.max(minHeight, startHeight + dy);
             }
-            if (handleClass.includes('handle-top')) {
+            if (isTop) {
                 newHeight = Math.max(minHeight, startHeight - dy);
                 newTop = startTop + dy;
             }
@@ -5339,7 +5345,11 @@ class DocumentService {
         e.stopPropagation();
         
         const handle = e.target;
-        const handleType = Array.from(handle.classList).find(cls => cls.includes('handle-'));
+        const classListArr = Array.from(handle.classList);
+        const isRight = classListArr.includes('handle-right') || classListArr.includes('handle-top-right') || classListArr.includes('handle-bottom-right');
+        const isLeft = classListArr.includes('handle-left') || classListArr.includes('handle-top-left') || classListArr.includes('handle-bottom-left');
+        const isTop = classListArr.includes('handle-top') || classListArr.includes('handle-top-left') || classListArr.includes('handle-top-right');
+        const isBottom = classListArr.includes('handle-bottom') || classListArr.includes('handle-bottom-left') || classListArr.includes('handle-bottom-right');
         
         const startX = e.clientX;
         const startY = e.clientY;
@@ -5360,17 +5370,17 @@ class DocumentService {
             let newLeft = startLeft;
             let newTop = startTop;
             
-            if (handleType?.includes('handle-right')) {
+            if (isRight) {
                 newWidth = Math.max(minWidth, startWidth + dx);
             }
-            if (handleType?.includes('handle-left')) {
+            if (isLeft) {
                 newWidth = Math.max(minWidth, startWidth - dx);
                 newLeft = startLeft + dx;
             }
-            if (handleType?.includes('handle-bottom')) {
+            if (isBottom) {
                 newHeight = Math.max(minHeight, startHeight + dy);
             }
-            if (handleType?.includes('handle-top')) {
+            if (isTop) {
                 newHeight = Math.max(minHeight, startHeight - dy);
                 newTop = startTop + dy;
             }
