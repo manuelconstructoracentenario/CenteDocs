@@ -756,6 +756,7 @@ class FileService {
     static async uploadFiles(files) {
         const uploadedFiles = [];
         const storage = new CloudStorageService();
+        // Ejecutar subidas en paralelo para acelerar tiempos
         const tasks = Array.from(files).map(async (file) => {
             try {
                 const fileId = 'file_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
@@ -4984,8 +4985,8 @@ class DocumentService {
                 const touchX = touch.clientX;
                 const touchY = touch.clientY;
                 
-                // Buscar handles cercanos (radio de 24px)
-                // Esto soluciona el problema de "dedo gordo" y z-index
+                // Detectar handle más cercano (radio de 24px) para entrar en modo redimensión
+                // Si no hay handle cercano, entra en modo arrastre
                 const handles = element.querySelectorAll('.signature-handle');
                 let closestHandle = null;
                 let minDistance = 24; // Radio de búsqueda equilibrado
@@ -5777,8 +5778,8 @@ class DocumentService {
         try {
             const rect = canvas.getBoundingClientRect();
 
-            // pageX/pageY incluyen el scroll; clientX/clientY no.
-            // Convertir a coordenadas de viewport correctamente sin doble restar scroll.
+            // Convertir a coordenadas de viewport sin doble restar scroll
+            // (evita desplazamientos al colocar/mover en móviles con scroll)
             const clientX = (touch.pageX !== undefined) ? (touch.pageX - window.scrollX) : touch.clientX;
             const clientY = (touch.pageY !== undefined) ? (touch.pageY - window.scrollY) : touch.clientY;
 
@@ -6211,9 +6212,9 @@ class DocumentService {
             <div class="signature-handle handle-bottom-right"></div>
         `;
         
-        // USAR EL NUEVO MÉTODO MEJORADO
-        this.makeSignatureInteractive(signatureElement, signature);
-        return signatureElement;
+            // Hacer la firma interactiva: arrastre y redimensión (mouse y touch)
+            this.makeSignatureInteractive(signatureElement, signature);
+            return signatureElement;
     }
 
     // ===========================================
@@ -6528,8 +6529,8 @@ class DocumentService {
                 y: position.y,
                 width: width,
                 height: height,
-                // Coordenadas normalizadas respecto al canvas (0..1). Esto hace que
-                // la posición sea independiente del zoom CSS o del tamaño visual.
+            // Coordenadas normalizadas respecto al canvas (0..1) para ser independientes
+            // del zoom CSS y del tamaño visual del canvas.
                 normX: (function(){
                     try { const c = document.getElementById('documentCanvas'); return c && c.width ? (position.x / c.width) : 0; } catch(e){return 0}
                 })(),
@@ -6904,7 +6905,7 @@ class DocumentExportService {
                 const displayCanvas = document.getElementById('documentCanvas');
                 const signatureLayer = document.getElementById('signatureLayer');
 
-                // canvas para composición por página
+                // Canvas por página para composición visual 1:1
                 const { jsPDF } = window.jspdf;
                 let pdfOutput = null;
 
@@ -6966,7 +6967,7 @@ class DocumentExportService {
                         }
                     }
 
-                    // Añadir página al jsPDF
+                    // Añadir página al jsPDF usando tamaño ORIGINAL de la página (pt) y orientación detectada
                     const isLandscape = viewportPts.width > viewportPts.height;
                     const orientation = isLandscape ? 'landscape' : 'portrait';
 
