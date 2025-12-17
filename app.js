@@ -5000,11 +5000,11 @@ class DocumentService {
                 const touchX = touch.clientX;
                 const touchY = touch.clientY;
                 
-                // Buscar handles cercanos (radio de 60px)
+                // Buscar handles cercanos (radio de 24px)
                 // Esto soluciona el problema de "dedo gordo" y z-index
                 const handles = element.querySelectorAll('.signature-handle');
                 let closestHandle = null;
-                let minDistance = 60; // Radio de búsqueda generoso
+                let minDistance = 24; // Radio de búsqueda equilibrado
                 
                 handles.forEach(handle => {
                     const rect = handle.getBoundingClientRect();
@@ -6837,9 +6837,7 @@ class DocumentExportService {
 
         try {
             if (DocumentService.currentDocument.type === 'application/pdf') {
-                if (window.PDFLib && typeof window.PDFLib.PDFDocument === 'function') {
-                    return await this.combineWithPDFDirect();
-                }
+                // Forzar ruta robusta basada en canvas para respetar rotaciones/orientaciones
                 return await this.combineWithPDF();
             } else if (DocumentService.currentDocument.type.startsWith('image/')) {
                 return await this.combineWithImage();
