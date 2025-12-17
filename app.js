@@ -5000,11 +5000,11 @@ class DocumentService {
                 const touchX = touch.clientX;
                 const touchY = touch.clientY;
                 
-                // Buscar handles cercanos (radio de 60px)
+                // Buscar handles cercanos (radio de 24px)
                 // Esto soluciona el problema de "dedo gordo" y z-index
                 const handles = element.querySelectorAll('.signature-handle');
                 let closestHandle = null;
-                let minDistance = 60; // Radio de búsqueda generoso
+                let minDistance = 24; // Radio de búsqueda equilibrado
                 
                 handles.forEach(handle => {
                     const rect = handle.getBoundingClientRect();
@@ -5017,14 +5017,6 @@ class DocumentService {
                         closestHandle = handle;
                     }
                 });
-
-                if (!closestHandle) {
-                    // Intento adicional: detectar exactamente el elemento bajo el dedo
-                    const el = document.elementFromPoint(touchX, touchY);
-                    if (el && el.classList && el.classList.contains('signature-handle')) {
-                        closestHandle = el;
-                    }
-                }
 
                 if (closestHandle) {
                     // Redimensionar usando el handle encontrado
