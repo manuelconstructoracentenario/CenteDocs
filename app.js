@@ -756,37 +756,26 @@ class FileService {
     static async uploadFiles(files) {
         const uploadedFiles = [];
         const storage = new CloudStorageService();
-        
-        for (const file of Array.from(files)) {
+        const tasks = Array.from(files).map(async (file) => {
             try {
                 const fileId = 'file_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-                
-                // Comprimir archivo si es necesario (máximo aumentado a 2048KB)
                 let fileToUpload = file;
                 try {
                     fileToUpload = await CompressionService.compressFile(file, 2048);
                 } catch (compressionError) {
-                    // Si no se puede comprimir, verificar si es demasiado grande
                     if (fileToUpload.size > 50 * 1024 * 1024) {
                         showNotification(`Error: ${file.name} excede 50MB (tamaño máximo de Supabase)`, 'error');
-                        continue;
+                        return null;
                     } else {
                         console.warn(`Advertencia: ${compressionError.message}`);
-                        // Continuar con el archivo original
                     }
                 }
-                
-                // Subir directamente a Supabase
                 try {
                     showNotification(`Subiendo ${file.name} a la nube...`);
-                    
-                    // Subir a Supabase Storage
                     const supabaseResult = await storage.supabase.uploadFile(
                         fileToUpload,
                         `users/${AppState.currentUser.uid}/uploads`
                     );
-                    
-                    // Preparar metadata SIN CONTENIDO BASE64
                     const fileData = {
                         id: fileId,
                         name: file.name,
@@ -803,36 +792,31 @@ class FileService {
                         url: supabaseResult.url,
                         storage_provider: 'supabase'
                     };
-                    
-                    // Guardar metadata en Firestore (sin contenido base64)
                     await storage.saveDocument(fileData);
-                    
-                    uploadedFiles.push(fileData);
                     this.files.push(fileData);
-                    
+                    uploadedFiles.push(fileData);
                     await storage.saveActivity({
                         type: 'file_upload',
                         description: `Subió el archivo: ${file.name}`,
                         documentName: file.name,
                         userName: AppState.currentUser.name
                     });
-                    
                     showNotification(`Archivo ${file.name} subido correctamente`);
-                    
+                    return fileData;
                 } catch (supabaseError) {
                     console.error('Error subiendo a Supabase:', supabaseError);
                     showNotification(`Error al subir ${file.name}: ${supabaseError.message}`, 'error');
+                    return null;
                 }
-                
             } catch (error) {
                 console.error('Error uploading file:', error);
                 showNotification(`Error al subir ${file.name}: ${error.message}`, 'error');
+                return null;
             }
-        }
-        
+        });
+        await Promise.all(tasks);
         DocumentService.refreshDocumentSelector();
         this.renderFilesGrid();
-        
         return uploadedFiles;
     }
 
@@ -6928,6 +6912,7 @@ class DocumentExportService {
                     const page = await pdf.getPage(p);
                     const scale = 2.0;
                     const viewport = page.getViewport({ scale });
+                    const viewportPts = page.getViewport({ scale: 1 }); // Tamaño original de la página en puntos
 
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
@@ -6982,22 +6967,21 @@ class DocumentExportService {
                     }
 
                     // Añadir página al jsPDF
-                    const isLandscape = canvas.width > canvas.height;
+                    const isLandscape = viewportPts.width > viewportPts.height;
                     const orientation = isLandscape ? 'landscape' : 'portrait';
 
                     if (!pdfOutput) {
-                        pdfOutput = new jsPDF({ 
-                            orientation: orientation, 
-                            unit: 'px', 
-                            format: [canvas.width, canvas.height] 
+                        pdfOutput = new jsPDF({
+                            orientation: orientation,
+                            unit: 'pt',
+                            format: [viewportPts.width, viewportPts.height]
                         });
-                        // Usar JPEG con calidad 0.75 para reducir drásticamente el tamaño del archivo final
                         const imgData = canvas.toDataURL('image/jpeg', 0.75);
-                        pdfOutput.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height, undefined, 'FAST');
+                        pdfOutput.addImage(imgData, 'JPEG', 0, 0, viewportPts.width, viewportPts.height, undefined, 'FAST');
                     } else {
-                        pdfOutput.addPage([canvas.width, canvas.height], orientation);
+                        pdfOutput.addPage([viewportPts.width, viewportPts.height], orientation);
                         const imgData = canvas.toDataURL('image/jpeg', 0.75);
-                        pdfOutput.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height, undefined, 'FAST');
+                        pdfOutput.addImage(imgData, 'JPEG', 0, 0, viewportPts.width, viewportPts.height, undefined, 'FAST');
                     }
                 }
 
