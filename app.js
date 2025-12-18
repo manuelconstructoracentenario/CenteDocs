@@ -749,6 +749,38 @@ class AuthService {
             }
         });
     }
+
+    static showDomainWarningIfNeeded() {
+        const host = window.location.hostname || '';
+        const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0';
+        const loginCard = document.querySelector('.login-card');
+        if (!loginCard) return;
+        if (document.getElementById('domainAccessHint')) return;
+        if (!isLocal) {
+            const hint = document.createElement('div');
+            hint.id = 'domainAccessHint';
+            hint.style.cssText = 'background:#fff3cd;color:#664d03;border:1px solid #ffecb5;border-radius:8px;padding:12px;margin-bottom:12px;display:flex;flex-direction:column;gap:8px';
+            hint.innerHTML = `
+                <div><i class="fas fa-globe"></i> Estás accediendo desde: <strong>${host}</strong></div>
+                <div>Si el inicio de sesión falla, agrega este dominio en Firebase → Authentication → Authorized domains.</div>
+                <div style="display:flex;gap:8px">
+                    <button class="btn btn-outline" id="copyDomainBtn"><i class="fas fa-copy"></i> Copiar dominio</button>
+                </div>
+            `;
+            loginCard.insertBefore(hint, loginCard.firstChild);
+            const copyBtn = hint.querySelector('#copyDomainBtn');
+            if (copyBtn) {
+                copyBtn.addEventListener('click', async () => {
+                    try {
+                        await navigator.clipboard.writeText(host);
+                        showNotification('Dominio copiado al portapapeles');
+                    } catch (e) {
+                        showNotification('No se pudo copiar el dominio', 'error');
+                    }
+                });
+            }
+        }
+    }
 }
 
 // Sistema de Gestión de Archivos
@@ -8210,6 +8242,7 @@ function updateAutoSignaturePreview() {
 // Inicialización de la aplicación
 document.addEventListener('DOMContentLoaded', function() {
     AuthService.initAuthListener();
+    AuthService.showDomainWarningIfNeeded();
 
     const loginForm = document.getElementById('loginForm');
     if (loginForm) {
