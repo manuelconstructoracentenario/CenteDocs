@@ -634,6 +634,8 @@ class AuthService {
                 return 'No existe una cuenta con este correo';
             case 'auth/wrong-password':
                 return 'La contraseña es incorrecta';
+            case 'auth/unauthorized-domain':
+                return 'Dominio no autorizado. Agrega tu dominio de GitHub Pages en Firebase → Authentication → Settings → Authorized domains';
             case 'auth/network-request-failed':
                 return 'Error de conexión. Verifica tu internet';
             default:
