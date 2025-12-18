@@ -8243,6 +8243,23 @@ function updateAutoSignaturePreview() {
 document.addEventListener('DOMContentLoaded', function() {
     AuthService.initAuthListener();
     AuthService.showDomainWarningIfNeeded();
+    
+    const mobileHelpBtn = document.getElementById('mobileHelpBtn');
+    const mobileHelpModal = document.getElementById('mobileHelpModal');
+    const closeHelpModal = document.getElementById('closeHelpModal');
+    if (mobileHelpBtn && mobileHelpModal) {
+        mobileHelpBtn.addEventListener('click', function() {
+            mobileHelpModal.classList.add('show');
+        });
+        mobileHelpModal.addEventListener('click', function(e) {
+            if (e.target === mobileHelpModal) mobileHelpModal.classList.remove('show');
+        });
+    }
+    if (closeHelpModal && mobileHelpModal) {
+        closeHelpModal.addEventListener('click', function() {
+            mobileHelpModal.classList.remove('show');
+        });
+    }
 
     const loginForm = document.getElementById('loginForm');
     if (loginForm) {
