@@ -4,7 +4,7 @@
 
 class SupabaseStorageService {
     constructor() {
-        this.client = supabase;
+        this.client = window.supabaseClient || supabase;
         this.bucketName = 'centedocs';
         this.maxFileSize = 50 * 1024 * 1024; // 50MB
     }
@@ -678,74 +678,52 @@ class AuthService {
 
     // En AuthService.initAuthListener, mejorar el manejo de archivos:
     static initAuthListener() {
-        firebase.auth().onAuthStateChanged(async (user) => {
-            if (user) {
-                console.log('Usuario autenticado:', user.email);
-                const storage = new CloudStorageService();
-                const userData = await storage.getUser(user.email);
-                
-                if (userData) {
-                    AuthService.setCurrentUser(userData);
-                    
-                    // Actualizar UI
-                    const currentUserName = document.getElementById('currentUserName');
-                    const userAvatar = document.getElementById('userAvatar');
-                    
-                    if (currentUserName) currentUserName.textContent = userData.name;
-                    if (userAvatar) userAvatar.textContent = userData.avatar;
-                    
-                    try {
-                        const autoSignature = await SignatureGenerator.createUserSignature(userData);
-                        AppState.currentSignature = autoSignature;
-                        updateAutoSignaturePreview();
-                    } catch (error) {
-                        console.error('Error generating signature:', error);
-                    }
-                    
-                    // Mostrar aplicación
-                    document.getElementById('loginScreen').style.display = 'none';
-                    document.getElementById('appContainer').classList.add('active');
-                    
-                    // CARGAR ARCHIVOS CON MANEJO DE ERRORES
-                    console.log('Cargando archivos del usuario...');
-                    
-                    try {
-                        await FileService.loadUserDocuments();
-                        console.log('Archivos cargados:', FileService.files.length);
-                        
-                        // Contar archivos que se cargaron correctamente
-                        const loadedFiles = FileService.files.filter(f => !f.tooLarge).length;
-                        const largeFiles = FileService.files.filter(f => f.tooLarge).length;
-                        
-                        if (largeFiles > 0) {
-                            showNotification(`${loadedFiles} archivos cargados, ${largeFiles} archivos muy grandes (descárguelos para ver)`, 'warning');
-                        }
-                        // No mostrar notificación de éxito automáticamente
-                        
-                        DocumentService.renderDocumentSelector();
-                        
-                        if (document.getElementById('files-page')?.classList.contains('active')) {
-                            FileService.renderFilesGrid();
-                        }
-                        
-                    } catch (error) {
-                        console.error('Error al cargar archivos:', error);
-                        // No mostrar notificación de error
-                    }
-                    
-                    // Cargar actividades
-                    ActivityService.loadRecentActivities();
-                    
-                    showNotification(`¡Bienvenido a Cente Docs, ${userData.name}!`);
-                }
-            } else {
-                console.log('No hay usuario autenticado');
-                AppState.currentUser = null;
-                FileService.files = [];
+        try {
+            if (!window.firebase || !firebase.auth) {
                 document.getElementById('loginScreen').style.display = 'flex';
                 document.getElementById('appContainer').classList.remove('active');
+                return;
             }
-        });
+            firebase.auth().onAuthStateChanged(async (user) => {
+                if (user) {
+                    const storage = new CloudStorageService();
+                    const userData = await storage.getUser(user.email);
+                    if (userData) {
+                        AuthService.setCurrentUser(userData);
+                        const currentUserName = document.getElementById('currentUserName');
+                        const userAvatar = document.getElementById('userAvatar');
+                        if (currentUserName) currentUserName.textContent = userData.name;
+                        if (userAvatar) userAvatar.textContent = userData.avatar;
+                        try {
+                            const autoSignature = await SignatureGenerator.createUserSignature(userData);
+                            AppState.currentSignature = autoSignature;
+                            updateAutoSignaturePreview();
+                        } catch (error) {}
+                        document.getElementById('loginScreen').style.display = 'none';
+                        document.getElementById('appContainer').classList.add('active');
+                        try {
+                            await FileService.loadUserDocuments();
+                            const loadedFiles = FileService.files.filter(f => !f.tooLarge).length;
+                            const largeFiles = FileService.files.filter(f => f.tooLarge).length;
+                            if (largeFiles > 0) {
+                                showNotification(`${loadedFiles} archivos cargados, ${largeFiles} archivos muy grandes (descárguelos para ver)`, 'warning');
+                            }
+                            DocumentService.renderDocumentSelector();
+                            if (document.getElementById('files-page')?.classList.contains('active')) {
+                                FileService.renderFilesGrid();
+                            }
+                        } catch (error) {}
+                        ActivityService.loadRecentActivities();
+                        showNotification(`¡Bienvenido a Cente Docs, ${userData.name}!`);
+                    }
+                } else {
+                    AppState.currentUser = null;
+                    FileService.files = [];
+                    document.getElementById('loginScreen').style.display = 'flex';
+                    document.getElementById('appContainer').classList.remove('active');
+                }
+            });
+        } catch (e) {}
     }
 }
 
@@ -8207,7 +8185,7 @@ function updateAutoSignaturePreview() {
 
 // Inicialización de la aplicación
 document.addEventListener('DOMContentLoaded', function() {
-    AuthService.initAuthListener();
+    try { AuthService.initAuthListener(); } catch (e) {}
 
     const loginForm = document.getElementById('loginForm');
     if (loginForm) {
@@ -8217,6 +8195,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const email = document.getElementById('email');
             const password = document.getElementById('password');
             
+            if (!window.firebase || !firebase.auth) {
+                showNotification('Servicio de autenticación no disponible', 'error');
+                return;
+            }
             if (!email || !password || !email.value || !password.value) {
                 showNotification('Por favor, completa todos los campos', 'error');
                 return;
@@ -8253,6 +8235,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
             
+            if (!window.firebase || !firebase.auth) {
+                showNotification('Servicio de autenticación no disponible', 'error');
+                return;
+            }
             if (!email || !password) {
                 showNotification('Por favor, completa todos los campos', 'error');
                 return;
