@@ -4281,53 +4281,6 @@
 }
 
 /* Mejoras para los iconos de firmantes */
-
-/* ------------------------------------------- */
-/* Ayuda móvil: botón flotante y modal        */
-/* ------------------------------------------- */
-.mobile-help {
-    position: fixed;
-    right: 16px;
-    bottom: 16px;
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    background: var(--primary);
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-    z-index: 1200;
-    cursor: pointer;
-}
-.mobile-help i { font-size: 18px; }
-
-.mobile-help-modal {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.6);
-    z-index: 2200;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-}
-.mobile-help-modal.show { display: flex; }
-
-.mobile-help-content {
-    background: #fff;
-    border-radius: 12px;
-    width: 95%;
-    max-width: 420px;
-    max-height: 85vh;
-    overflow: auto;
-    padding: 20px;
-    box-shadow: 0 6px 20px rgba(0,0,0,0.25);
-}
-.help-steps { display: flex; flex-direction: column; gap: 10px; }
-.help-step { display: flex; align-items: center; gap: 10px; }
-.step-icon { font-size: 18px; }
 .signer-icon-wrapper {
     cursor: pointer;
     transition: transform 0.2s ease;
