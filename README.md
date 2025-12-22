@@ -90,7 +90,6 @@ Contraseña: ••••••••
    - **Siguiente ►**: Va a la siguiente página
 
 **Alternativamente**:
-- Usa `Page Up` / `Page Down` en el teclado (si implementado)
 - Scroll hacia arriba/abajo en el área del documento
 
 ### 5. Guardar Documento Firmado

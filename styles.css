@@ -605,7 +605,7 @@
         background: rgba(47, 108, 70, 0.1);
         cursor: move;
         z-index: 10;
-        pointer-events: all;
+        pointer-events: auto;
         transition: none;
         min-width: 100px;
         min-height: 50px;

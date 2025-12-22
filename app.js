@@ -5659,11 +5659,18 @@ class DocumentService {
         const signatureLayer = document.getElementById('signatureLayer');
         
         if (canvas && container) {
-            const displayWidth = canvas.width;
-            const displayHeight = canvas.height;
+            // Usar dimensiones de estilo si existen (para HiDPI), si no, usar dimensiones de pixel
+            let displayWidth = parseFloat(canvas.style.width);
+            let displayHeight = parseFloat(canvas.style.height);
             
-            canvas.style.width = displayWidth + 'px';
-            canvas.style.height = displayHeight + 'px';
+            if (!displayWidth || isNaN(displayWidth)) {
+                displayWidth = canvas.width;
+                canvas.style.width = displayWidth + 'px';
+            }
+            if (!displayHeight || isNaN(displayHeight)) {
+                displayHeight = canvas.height;
+                canvas.style.height = displayHeight + 'px';
+            }
             
             container.style.width = displayWidth + 'px';
             container.style.height = displayHeight + 'px';
@@ -5719,15 +5726,24 @@ class DocumentService {
             const originalWidth = viewport.width;
             const originalHeight = viewport.height;
 
-            const optimalSize = this.calculateOptimalDocumentSize(originalWidth, originalHeight, 1.5);
-
-            canvas.width = optimalSize.width;
-            canvas.height = optimalSize.height;
+            // Calcular tamaño visual óptimo (para la pantalla)
+            const visualSize = this.calculateOptimalDocumentSize(originalWidth, originalHeight, 1.5);
+            
+            // Aumentar resolución interna (3x para máxima calidad)
+            const resolutionFactor = 3.0; 
+            
+            canvas.width = Math.round(visualSize.width * resolutionFactor);
+            canvas.height = Math.round(visualSize.height * resolutionFactor);
+            
+            // Mantener tamaño visual fijo
+            canvas.style.width = visualSize.width + 'px';
+            canvas.style.height = visualSize.height + 'px';
 
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
 
-            const optimalViewport = page.getViewport({ scale: optimalSize.scale });
+            // Renderizar con la escala de alta resolución
+            const optimalViewport = page.getViewport({ scale: visualSize.scale * resolutionFactor });
 
             const renderContext = {
                 canvasContext: ctx,
@@ -6103,8 +6119,8 @@ class DocumentService {
     }
 
     static createPageControls() {
-        const container = document.getElementById('documentContainer');
-        if (!container) return;
+        const header = document.querySelector('.viewer-header');
+        if (!header) return;
 
         // Evitar duplicar controles
         let controls = document.getElementById('pageControls');
@@ -6112,11 +6128,17 @@ class DocumentService {
             controls = document.createElement('div');
             controls.id = 'pageControls';
             controls.style.position = 'absolute';
-            controls.style.right = '12px';
-            controls.style.top = '12px';
+            controls.style.right = '25px';
+            controls.style.top = '100%';
+            controls.style.marginTop = '15px';
             controls.style.zIndex = 9999;
             controls.style.display = 'flex';
             controls.style.gap = '6px';
+            
+            // Asegurar que el header tenga posicionamiento relativo para que los controles se posicionen respecto a él
+            if (getComputedStyle(header).position === 'static') {
+                header.style.position = 'relative';
+            }
 
             const prev = document.createElement('button');
             prev.className = 'btn btn-outline';
@@ -6126,10 +6148,13 @@ class DocumentService {
 
             const pageInfo = document.createElement('div');
             pageInfo.id = 'pageInfo';
-            pageInfo.style.color = 'white';
+            pageInfo.style.color = 'var(--dark)';
+            pageInfo.style.fontWeight = '600';
             pageInfo.style.padding = '8px 12px';
-            pageInfo.style.background = 'rgba(0,0,0,0.45)';
+            pageInfo.style.background = 'rgba(255, 255, 255, 0.9)';
             pageInfo.style.borderRadius = '6px';
+            pageInfo.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+            pageInfo.style.border = '1px solid #e1e5e9';
 
             const next = document.createElement('button');
             next.className = 'btn btn-outline';
@@ -6140,8 +6165,7 @@ class DocumentService {
             controls.appendChild(prev);
             controls.appendChild(pageInfo);
             controls.appendChild(next);
-            container.style.position = 'relative';
-            container.appendChild(controls);
+            header.appendChild(controls);
         }
 
         this.updatePageControls();
