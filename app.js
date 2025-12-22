@@ -6889,7 +6889,8 @@ class DocumentExportService {
 
                 for (let p = 1; p <= numPages; p++) {
                     const page = await pdf.getPage(p);
-                    const scale = 2.0;
+                    // Aumentar escala a 3.0 para mejor resolución (evitar pixelado)
+                    const scale = 3.0;
                     const viewport = page.getViewport({ scale });
                     const viewportPts = page.getViewport({ scale: 1 }); // Tamaño original de la página en puntos
 
@@ -6955,12 +6956,13 @@ class DocumentExportService {
                             unit: 'pt',
                             format: [viewportPts.width, viewportPts.height]
                         });
-                        const imgData = canvas.toDataURL('image/jpeg', 0.75);
-                        pdfOutput.addImage(imgData, 'JPEG', 0, 0, viewportPts.width, viewportPts.height, undefined, 'FAST');
+                        // Usar calidad alta (0.95) y compresión SLOW para mejor resultado visual
+                        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+                        pdfOutput.addImage(imgData, 'JPEG', 0, 0, viewportPts.width, viewportPts.height, undefined, 'SLOW');
                     } else {
                         pdfOutput.addPage([viewportPts.width, viewportPts.height], orientation);
-                        const imgData = canvas.toDataURL('image/jpeg', 0.75);
-                        pdfOutput.addImage(imgData, 'JPEG', 0, 0, viewportPts.width, viewportPts.height, undefined, 'FAST');
+                        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+                        pdfOutput.addImage(imgData, 'JPEG', 0, 0, viewportPts.width, viewportPts.height, undefined, 'SLOW');
                     }
                 }
 
@@ -7649,7 +7651,7 @@ class SignatureFieldDetector {
                     return;
                 }
                 
-                // Filtrar campos que no estén ocupados por firmas existentes
+                // Filtrar campos que no estén ocupados por firas existentes
                 const availableFields = this.filterOccupiedFields(allFields, existingSignatures);
                 
                 // Si hay campos disponibles, usar el mejor
