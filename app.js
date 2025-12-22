@@ -5719,19 +5719,10 @@ class DocumentService {
             const originalWidth = viewport.width;
             const originalHeight = viewport.height;
 
-            // Calcular tamaño óptimo para visualización (CSS pixels) - Multiplicador 1.5 (Standard)
-            const displaySize = this.calculateOptimalDocumentSize(originalWidth, originalHeight, 1.5);
-            
-            // Calcular tamaño óptimo para renderizado (Canvas pixels) - Multiplicador 3.0 (High Res / Retina)
-            // Esto mejora la resolución del PDF renderizado sin afectar el tamaño visual
-            const optimalSize = this.calculateOptimalDocumentSize(originalWidth, originalHeight, 3.0);
+            const optimalSize = this.calculateOptimalDocumentSize(originalWidth, originalHeight, 1.5);
 
             canvas.width = optimalSize.width;
             canvas.height = optimalSize.height;
-            
-            // Fijar tamaño visual explícito para soportar HiDPI
-            canvas.style.width = displaySize.width + 'px';
-            canvas.style.height = displaySize.height + 'px';
 
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
@@ -5799,46 +5790,24 @@ class DocumentService {
     }
 
     static showPDFFallback(canvas, ctx) {
-        // Calcular tamaño visual (1.5x) y renderizado (3.0x) para HiDPI
-        const displaySize = this.calculateOptimalDocumentSize(800, 1000, 1.5);
-        const optimalSize = this.calculateOptimalDocumentSize(800, 1000, 3.0);
-        
+        const optimalSize = this.calculateOptimalDocumentSize(800, 1000);
         canvas.width = optimalSize.width;
         canvas.height = optimalSize.height;
-        canvas.style.width = displaySize.width + 'px';
-        canvas.style.height = displaySize.height + 'px';
-        
-        // Escalar contexto para dibujar nítido
-        ctx.scale(2, 2); // 3.0 / 1.5 = 2
         
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         
-        // Usar dimensiones lógicas (displaySize) para el dibujo ya que escalamos el contexto
-        // Pero espera, canvas.width es el buffer real.
-        // Si hago ctx.scale(2, 2), mis coordenadas de dibujo deben ser en "display pixels".
-        // El código abajo usa canvas.width/height...
-        // Si canvas.width es 1600 (HiDPI), y hago scale(2,2),
-        // fillRect(0,0, canvas.width, canvas.height) -> fillRect(0,0, 1600, 1000) -> Dibuja 3200x2000.
-        // WRONG.
-        
-        // Si escalo el contexto, debo usar coordenadas lógicas.
-        // canvas.width / 2 = 800.
-        
-        const logicalWidth = canvas.width / 2;
-        const logicalHeight = canvas.height / 2;
-        
         ctx.fillStyle = 'white';
-        ctx.fillRect(0, 0, logicalWidth, logicalHeight);
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
         
         ctx.strokeStyle = '#e1e5e9';
         ctx.lineWidth = 2;
-        ctx.strokeRect(10, 10, logicalWidth - 20, logicalHeight - 20);
+        ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
         
         ctx.fillStyle = '#2f6c46';
         ctx.font = 'bold 24px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText(this.currentDocument.name, logicalWidth / 2, 60);
+        ctx.fillText(this.currentDocument.name, canvas.width / 2, 60);
         
         ctx.fillStyle = '#333';
         ctx.font = '16px Arial';
@@ -5860,10 +5829,7 @@ class DocumentService {
         ctx.fillStyle = '#6c8789';
         ctx.font = 'italic 14px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('Para ver el contenido completo, descarga el archivo', logicalWidth / 2, logicalHeight - 50);
-        
-        // Reset transform para evitar afectar otros renders si se reusa el contexto (aunque se limpia)
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.fillText('Para ver el contenido completo, descarga el archivo', canvas.width / 2, canvas.height - 50);
     }
 
     static async renderImageDocument(canvas, ctx) {
@@ -6005,12 +5971,8 @@ class DocumentService {
         
         if (canvas && container) {
             // Mantener dimensiones reales del canvas
-            // Usar style.width como referencia base si existe (HiDPI support), sino canvas.width
-            const styleWidth = parseFloat(canvas.style.width);
-            const styleHeight = parseFloat(canvas.style.height);
-            
-            const originalWidth = !isNaN(styleWidth) && styleWidth > 0 ? styleWidth : canvas.width;
-            const originalHeight = !isNaN(styleHeight) && styleHeight > 0 ? styleHeight : canvas.height;
+            const originalWidth = canvas.width;
+            const originalHeight = canvas.height;
             
             // Calcular dimensiones visuales (solo CSS, no atributos)
             const scaledWidth = originalWidth * this.currentZoom;
@@ -6061,16 +6023,8 @@ class DocumentService {
         }
 
         // El canvas.width/height son las dimensiones en píxeles de la superficie de dibujo
-        // Para legacy signatures (sin normX), necesitamos usar la resolución estándar (visual/CSS)
-        // en lugar de la resolución real del canvas (que puede ser HiDPI)
-        const styleWidth = parseFloat(canvas.style.width);
-        const styleHeight = parseFloat(canvas.style.height);
-        
-        // standardWidth es la anchura "lógica" o CSS base.
-        // Si style.width está definido (HiDPI mode), usamos eso.
-        // Si no, usamos canvas.width (Legacy mode).
-        const standardWidth = (!isNaN(styleWidth) && styleWidth > 0) ? styleWidth : canvas.width;
-        const standardHeight = (!isNaN(styleHeight) && styleHeight > 0) ? styleHeight : canvas.height;
+        const pixelWidth = canvas.width;
+        const pixelHeight = canvas.height;
 
         // Actualizar capa de firmas para coincidir con el tamaño escalado
         signatureLayer.style.width = displayWidth + 'px';
@@ -6081,11 +6035,10 @@ class DocumentService {
             const signatureElement = document.querySelector(`[data-signature-id="${signature.id}"]`);
             if (signatureElement) {
                 // Calcular posición escalada basada en coordenadas normalizadas o fallback
-                // Si falta normX, usamos signature.x / standardWidth (asumiendo que x fue creado en resolución standard)
-                const relX = (typeof signature.normX === 'number') ? signature.normX : (signature.x / standardWidth);
-                const relY = (typeof signature.normY === 'number') ? signature.normY : (signature.y / standardHeight);
-                const relW = (typeof signature.normWidth === 'number') ? signature.normWidth : (signature.width / standardWidth);
-                const relH = (typeof signature.normHeight === 'number') ? signature.normHeight : (signature.height / standardHeight);
+                const relX = (typeof signature.normX === 'number') ? signature.normX : (signature.x / pixelWidth);
+                const relY = (typeof signature.normY === 'number') ? signature.normY : (signature.y / pixelHeight);
+                const relW = (typeof signature.normWidth === 'number') ? signature.normWidth : (signature.width / pixelWidth);
+                const relH = (typeof signature.normHeight === 'number') ? signature.normHeight : (signature.height / pixelHeight);
 
                 const scaledX = relX * displayWidth;
                 const scaledY = relY * displayHeight;
@@ -6211,28 +6164,16 @@ class DocumentService {
         const canvas = document.getElementById('documentCanvas');
         if (canvas) {
             const rect = canvas.getBoundingClientRect();
-            const computedStyle = window.getComputedStyle(canvas);
-            const transform = computedStyle?.transform || 'none';
-            let displayWidth, displayHeight;
-            if (transform && transform !== 'none') {
-                displayWidth = rect.width;
-                displayHeight = rect.height;
-            } else {
-                displayWidth = canvas.offsetWidth || rect.width;
-                displayHeight = canvas.offsetHeight || rect.height;
-            }
+            const displayWidth = rect.width || parseFloat(canvas.style.width) || canvas.width;
+            const displayHeight = rect.height || parseFloat(canvas.style.height) || canvas.height;
+            const pixelWidth = canvas.width;
+            const pixelHeight = canvas.height;
 
-            // Standard resolution logic (HiDPI support)
-            const styleWidth = parseFloat(canvas.style.width);
-            const styleHeight = parseFloat(canvas.style.height);
-            const standardWidth = (!isNaN(styleWidth) && styleWidth > 0) ? styleWidth : canvas.width;
-            const standardHeight = (!isNaN(styleHeight) && styleHeight > 0) ? styleHeight : canvas.height;
-
-            // Preferir coordenadas normalizadas si están presentes, si no usar standardWidth
-            const left = (typeof signature.normX === 'number' ? signature.normX : (signature.x / standardWidth)) * displayWidth;
-            const top = (typeof signature.normY === 'number' ? signature.normY : (signature.y / standardHeight)) * displayHeight;
-            const w = (typeof signature.normWidth === 'number' ? signature.normWidth : (signature.width / standardWidth)) * displayWidth;
-            const h = (typeof signature.normHeight === 'number' ? signature.normHeight : (signature.height / standardHeight)) * displayHeight;
+            // Preferir coordenadas normalizadas si están presentes
+            const left = (typeof signature.normX === 'number' ? signature.normX : (signature.x / pixelWidth)) * displayWidth;
+            const top = (typeof signature.normY === 'number' ? signature.normY : (signature.y / pixelHeight)) * displayHeight;
+            const w = (typeof signature.normWidth === 'number' ? signature.normWidth : (signature.width / pixelWidth)) * displayWidth;
+            const h = (typeof signature.normHeight === 'number' ? signature.normHeight : (signature.height / pixelHeight)) * displayHeight;
 
             signatureElement.style.left = left + 'px';
             signatureElement.style.top = top + 'px';
@@ -6525,20 +6466,6 @@ class DocumentService {
             let width = 90;
             let height = 36;
             
-            // Factor de escala para HiDPI
-            const canvas = document.getElementById('documentCanvas');
-            let pixelRatio = 1;
-            if (canvas) {
-                const styleWidth = parseFloat(canvas.style.width);
-                if (styleWidth > 0) {
-                    pixelRatio = canvas.width / styleWidth;
-                }
-            }
-            
-            // Ajustar dimensiones base por pixelRatio
-            width = Math.round(width * pixelRatio);
-            height = Math.round(height * pixelRatio);
-            
             if (this.currentSignature.type === 'upload') {
                 const img = new Image();
                 img.src = this.currentSignature.data;
@@ -6551,8 +6478,8 @@ class DocumentService {
                 width = img.naturalWidth;
                 height = img.naturalHeight;
                 
-                const maxWidth = 110 * pixelRatio;
-                const maxHeight = 45 * pixelRatio;
+                const maxWidth = 110;
+                const maxHeight = 45;
                 
                 if (width > maxWidth || height > maxHeight) {
                     const ratio = Math.min(maxWidth / width, maxHeight / height);
