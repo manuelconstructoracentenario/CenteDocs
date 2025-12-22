@@ -4963,11 +4963,11 @@ class DocumentService {
                 const touchX = touch.clientX;
                 const touchY = touch.clientY;
                 
-                // Detectar handle más cercano (radio de 24px) para entrar en modo redimensión
+                // Detectar handle más cercano (radio de 45px para mejor tacto) para entrar en modo redimensión
                 // Si no hay handle cercano, entra en modo arrastre
                 const handles = element.querySelectorAll('.signature-handle');
                 let closestHandle = null;
-                let minDistance = 24; // Radio de búsqueda equilibrado
+                let minDistance = 45; // Radio de búsqueda aumentado para facilitar agarre en móvil
                 
                 handles.forEach(handle => {
                     const rect = handle.getBoundingClientRect();
@@ -5277,9 +5277,14 @@ class DocumentService {
                     if (displayWidth > 0 && displayHeight > 0) {
                         signatureData.x = Math.round((newLeft / displayWidth) * pixelWidth);
                         signatureData.y = Math.round((newTop / displayHeight) * pixelHeight);
+                        // Actualizar valores normalizados para que el zoom funcione correctamente
+                        signatureData.normX = +(signatureData.x / pixelWidth) || 0;
+                        signatureData.normY = +(signatureData.y / pixelHeight) || 0;
                     } else {
                         signatureData.x = Math.round(newLeft);
                         signatureData.y = Math.round(newTop);
+                        signatureData.normX = 0;
+                        signatureData.normY = 0;
                     }
                 } else {
                     signatureData.x = Math.round(newLeft);
