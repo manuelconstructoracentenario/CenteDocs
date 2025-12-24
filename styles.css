@@ -408,6 +408,17 @@
         font-size: 16px;
     }
 
+    .btn-danger {
+        background: var(--danger);
+        color: white;
+    }
+
+    .btn-danger:hover {
+        background: #c0392b;
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(231, 76, 60, 0.4);
+    }
+
     .btn-sm {
         padding: 8px 16px;
         font-size: 14px;
@@ -492,7 +503,7 @@
         display: flex;
         gap: 12px;
         align-items: center;
-        flex-wrap: wrap;
+        flex-wrap: nowrap; /* Asegurar que no se envuelvan */
     }
 
     .zoom-controls {
@@ -906,6 +917,133 @@
         border-radius: 12px;
         box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
         overflow: hidden;
+    }
+
+    /* =========================================
+       ESTILOS PARA MODO PANTALLA COMPLETA
+       ========================================= */
+    
+    /* El contenedor principal ocupa toda la pantalla */
+    .document-viewer:fullscreen,
+    .document-viewer:-webkit-full-screen,
+    .document-viewer:-ms-fullscreen {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        min-height: 0 !important; /* Anular min-height global */
+        max-height: 100vh !important;
+        border-radius: 0 !important;
+        border: none !important;
+        margin: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        background: #333 !important; /* Fondo oscuro para mejor contraste */
+        overflow: hidden !important; /* Evitar scroll en el contenedor principal */
+        z-index: 2147483647 !important; /* Máximo z-index posible */
+    }
+
+    /* El encabezado se mantiene visible pero más compacto si se desea */
+    .document-viewer:fullscreen .viewer-header,
+    .document-viewer:-webkit-full-screen .viewer-header,
+    .document-viewer:-ms-fullscreen .viewer-header {
+        background: #222 !important;
+        color: white !important;
+        border-bottom: 1px solid #444 !important;
+        padding: 15px 20px !important;
+        height: 70px !important; /* Altura fija para cálculos */
+        flex-shrink: 0 !important;
+        z-index: 1000;
+        box-sizing: border-box !important;
+    }
+
+    /* Ocultar la barra de estado en pantalla completa para ganar espacio */
+    .document-viewer:fullscreen .status-bar,
+    .document-viewer:-webkit-full-screen .status-bar,
+    .document-viewer:-ms-fullscreen .status-bar {
+        display: none !important;
+    }
+
+    /* Ajuste de textos en header fullscreen */
+    .document-viewer:fullscreen .document-selector,
+    .document-viewer:-webkit-full-screen .document-selector,
+    .document-viewer:-ms-fullscreen .document-selector {
+        background: rgba(255,255,255,0.1);
+        border-color: rgba(255,255,255,0.2);
+        color: white;
+    }
+    
+    .document-viewer:fullscreen .document-selector option,
+    .document-viewer:-webkit-full-screen .document-selector option,
+    .document-viewer:-ms-fullscreen .document-selector option {
+        color: #333;
+    }
+
+    /* El área de contenido debe permitir scroll en ambas direcciones */
+    /* USAMOS POSICIONAMIENTO ABSOLUTO PARA GARANTIZAR VISIBILIDAD */
+    .document-viewer:fullscreen .viewer-content,
+    .document-viewer:-webkit-full-screen .viewer-content,
+    .document-viewer:-ms-fullscreen .viewer-content {
+        position: absolute !important;
+        top: 70px !important; /* Justo debajo del header */
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+        height: calc(100vh - 70px) !important; /* Altura explícita para evitar desbordamiento */
+        min-height: 0 !important;
+        margin: 0 !important;
+        
+        overflow: scroll !important; /* Forzar scrollbars siempre visibles */
+        padding: 40px !important;
+        background: #555 !important;
+        display: block !important;
+        text-align: center !important;
+        z-index: 500 !important; /* Nivel intermedio */
+        box-sizing: border-box !important;
+    }
+
+    /* Mejora de visibilidad de la barra de desplazamiento en fullscreen */
+    .document-viewer:fullscreen .viewer-content::-webkit-scrollbar,
+    .document-viewer:-webkit-full-screen .viewer-content::-webkit-scrollbar,
+    .document-viewer:-ms-fullscreen .viewer-content::-webkit-scrollbar {
+        width: 16px !important; /* Más ancha */
+        height: 16px !important; /* Más alta */
+        display: block !important;
+        background: #333 !important;
+    }
+
+    .document-viewer:fullscreen .viewer-content::-webkit-scrollbar-thumb,
+    .document-viewer:-webkit-full-screen .viewer-content::-webkit-scrollbar-thumb,
+    .document-viewer:-ms-fullscreen .viewer-content::-webkit-scrollbar-thumb {
+        background: #999 !important; /* Color claro para contraste */
+        border: 2px solid #333 !important;
+        border-radius: 8px !important;
+    }
+
+    .document-viewer:fullscreen .viewer-content::-webkit-scrollbar-track,
+    .document-viewer:-webkit-full-screen .viewer-content::-webkit-scrollbar-track,
+    .document-viewer:-ms-fullscreen .viewer-content::-webkit-scrollbar-track {
+        background: #333 !important;
+    }
+
+    .document-viewer:fullscreen .viewer-content::-webkit-scrollbar-corner,
+    .document-viewer:-webkit-full-screen .viewer-content::-webkit-scrollbar-corner,
+    .document-viewer:-ms-fullscreen .viewer-content::-webkit-scrollbar-corner {
+        background: #333 !important;
+    }
+
+    /* El contenedor del documento */
+    .document-viewer:fullscreen .document-container,
+    .document-viewer:-webkit-full-screen .document-container,
+    .document-viewer:-ms-fullscreen .document-container {
+        display: inline-block !important; /* Permite centrado con text-align */
+        vertical-align: top !important;
+        margin: 0 auto !important;
+        box-shadow: 0 0 50px rgba(0,0,0,0.5) !important;
+        text-align: left !important; /* Resetear alineación interna */
+        position: relative !important; /* Para posicionamiento de firmas */
     }
 
     .signatures-header {

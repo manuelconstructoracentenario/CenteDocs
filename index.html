@@ -135,9 +135,18 @@
                                     <button class="btn btn-outline" id="zoomInBtn">
                                         <i class="fas fa-search-plus"></i>
                                     </button>
+                                    <button class="btn btn-outline" id="fullScreenBtn" title="Pantalla Completa">
+                                        <i class="fas fa-expand"></i>
+                                    </button>
                                 </div>
                                 <button class="btn btn-primary" id="addSignatureBtn">
                                     <i class="fas fa-signature"></i> Agregar Firma
+                                </button>
+                                <button class="btn btn-danger" id="clearAllSignatures" title="Limpiar Firmas">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                <button class="btn btn-success" id="saveDocumentWithSignatures" title="Guardar Documento Firmado">
+                                    <i class="fas fa-save"></i>
                                 </button>
                             </div>
                         </div>
@@ -191,10 +200,7 @@
                                         <p><strong>Información incluida automáticamente:</strong></p>
                                         <ul>
                                             <li>Nombre completo en tamaño grande</li>
-                                            <li>Organización: Constructora Centenario</li>
-                                            <li>Certificado digital (DN/CN)</li>
-                                            <li>Correo electrónico</li>
-                                            <li>Fecha y hora actual con timezone</li>
+                                            <li>Fecha y hora actual</li>
                                         </ul>
                                     </div>
                                 </div>
@@ -237,9 +243,7 @@
                             </div>
                             
                             <div class="signature-preview">
-                                <div class="preview-title"><i class="fas fa-eye"></i> Vista previa de firma</div>
                                 <img id="signaturePreview" class="signature-img" alt="Firma guardada">
-                                <div id="noSignature" class="no-signature">Aún no has guardado una firma</div>
                                 <div class="signature-info" id="signatureInfo"></div>
                             </div>
                         </div>
@@ -250,12 +254,7 @@
                         <div class="signatures-header">
                             <h3><i class="fas fa-pen-fancy"></i> Firmas en el Documento</h3>
                             <div class="signature-actions-sidebar">
-                                <button class="btn btn-outline btn-sm" id="clearAllSignatures">
-                                    <i class="fas fa-trash"></i> Limpiar
-                                </button>
-                                <button class="btn btn-primary btn-sm" id="saveDocumentWithSignatures">
-                                    <i class="fas fa-save"></i> Guardar
-                                </button>
+                                <!-- Botones movidos a la barra superior -->
                             </div>
                         </div>
                         <div class="signatures-grid" id="signaturesGrid">

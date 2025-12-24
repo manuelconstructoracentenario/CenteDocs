@@ -5980,6 +5980,31 @@ class DocumentService {
         this.applyRealZoom();
     }
 
+    static toggleFullScreen() {
+        const viewer = document.querySelector('.document-viewer');
+        if (!viewer) return;
+        
+        if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.msFullscreenElement) {
+            if (viewer.requestFullscreen) {
+                viewer.requestFullscreen().catch(err => {
+                    console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+                });
+            } else if (viewer.webkitRequestFullscreen) {
+                viewer.webkitRequestFullscreen(); // Safari
+            } else if (viewer.msRequestFullscreen) {
+                viewer.msRequestFullscreen(); // IE11
+            }
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            } else if (document.msExitFullscreen) {
+                document.msExitFullscreen();
+            }
+        }
+    }
+
     static applyRealZoom() {
         const canvas = document.getElementById('documentCanvas');
         const container = document.getElementById('documentContainer');
@@ -8550,6 +8575,30 @@ document.addEventListener('DOMContentLoaded', function() {
             e.stopPropagation();
             DocumentService.zoomOut();
         });
+    }
+
+    const fullScreenBtn = document.getElementById('fullScreenBtn');
+    if (fullScreenBtn) {
+        fullScreenBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            DocumentService.toggleFullScreen();
+        });
+
+        // Actualizar icono cuando cambia el estado
+        const updateFullScreenIcon = () => {
+            const icon = fullScreenBtn.querySelector('i');
+            if (document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
+                icon.className = 'fas fa-compress';
+                fullScreenBtn.title = "Salir de Pantalla Completa";
+            } else {
+                icon.className = 'fas fa-expand';
+                fullScreenBtn.title = "Pantalla Completa";
+            }
+        };
+
+        document.addEventListener('fullscreenchange', updateFullScreenIcon);
+        document.addEventListener('webkitfullscreenchange', updateFullScreenIcon);
+        document.addEventListener('msfullscreenchange', updateFullScreenIcon);
     }
     
     const viewerContent = document.getElementById('viewerContent');
